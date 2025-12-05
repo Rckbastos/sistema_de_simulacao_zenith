@@ -2,6 +2,8 @@
 
 Painel administrativo (desktop) e fluxo mobile do Sistema de Simulação Zenith Pay preparados para deploy único.
 
+> Atualização: os arquivos HTML foram sincronizados com o pacote `C:\Users\rbast\Downloads\sistema-zenith-producao-final` (versão v4.0 do sistema de simulação/cotação). O bundle anterior (`sistema-investimentos-zenith-final`) continha apenas o painel de investimentos e foi substituído aqui pelo sistema completo, com todos os formulários e ações funcionando.
+
 ---
 
 ## 📂 Conteúdo do Repositório
@@ -12,6 +14,16 @@ Painel administrativo (desktop) e fluxo mobile do Sistema de Simulação Zenith 
 - `server.js` – servidor HTTP simples (Node) que expõe `/` e `/mobile`.
 - `package.json` – scripts (`npm run dev` / `npm start`) e configuração para o Railway.
 - `INSTRUCOES-PRODUCAO.md` – guia detalhado de publicação e checklist final.
+
+---
+
+## 🧩 Funcionalidades Principais
+
+- Login validando `admin / admin123` e controle de sessão com bloqueio do app até autenticar.
+- CRUD de serviços, clientes e comerciais com formulários dedicados, botões de editar/excluir e feedback visual em tabelas dinâmicas.
+- Simulador/gerador de cotações completo (`calcularCotacao`, `salvarCotacao`, filtros por status, atualização em tempo real das listas de abertas/fechadas).
+- Painel de indicadores atualizado por `atualizarDashboard()` (contagem de cotações, valores movimentados, clientes ativos).
+- Versão mobile com navegação em abas, cards responsivos e as mesmas ações centrais (login, dashboards, formulários e filtros operacionais).
 
 ---
 

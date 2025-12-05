@@ -2,6 +2,8 @@
 
 Guia oficial de publicação das versões desktop e mobile do Sistema de Simulação Zenith Pay.
 
+> Origem dos arquivos: `C:\Users\rbast\Downloads\sistema-zenith-producao-final`. Use este diretório local como referência caso precise reenviar o pacote manualmente. O bundle antigo (`sistema-investimentos-zenith-final`) não deve mais ser utilizado.
+
 ---
 
 ## 📂 Arquivos do Pacote
