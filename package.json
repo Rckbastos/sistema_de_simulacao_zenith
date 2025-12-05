@@ -1,0 +1,21 @@
+{
+  "name": "sistema_de_simulacao_zenith",
+  "version": "1.0.0",
+  "description": "Versões desktop e mobile do Sistema de Simulação Zenith prontas para deploy no Railway.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "zenith",
+    "simulacao",
+    "investimentos",
+    "railway"
+  ],
+  "author": "Zenith Pay",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}

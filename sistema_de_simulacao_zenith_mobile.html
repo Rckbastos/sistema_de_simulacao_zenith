@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Sistema de Simulação Zenith - Mobile</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        :root {
+            --bg-primary: #000000;
+            --bg-secondary: #0a0a0a;
+            --bg-card: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #999999;
+            --accent-gold: #D4AF37;
+            --accent-gold-dark: #B8941F;
+            --border-color: #333333;
+            --success: #4CAF50;
+            --warning: #FF9800;
+            --danger: #f44336;
+            --info: #2196F3;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding-bottom: 70px;
+            overflow-x: hidden;
+        }
+        
+        /* Login Screen */
+        .login-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .login-box {
+            background: var(--bg-card);
+            border: 2px solid var(--accent-gold);
+            border-radius: 12px;
+            padding: 30px 20px;
+            width: 100%;
+            max-width: 400px;
+        }
+        
+        .login-logo {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--accent-gold);
+            text-align: center;
+            margin-bottom: 8px;
+        }
+        
+        .login-subtitle {
+            text-align: center;
+            color: var(--text-secondary);
+            margin-bottom: 25px;
+            font-size: 13px;
+        }
+        
+        /* Main App */
+        .app-container {
+            display: none;
+        }
+        
+        .app-container.active { display: block; }
+        
+        /* Header */
+        .mobile-header {
+            background: var(--bg-secondary);
+            border-bottom: 2px solid var(--accent-gold);
+            padding: 15px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent-gold);
+        }
+        
+        .user-info {
+            text-align: right;
+            font-size: 12px;
+        }
+        
+        .user-name {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .user-role {
+            color: var(--text-secondary);
+            font-size: 11px;
+        }
+        
+        .btn-logout {
+            margin-top: 5px;
+            padding: 4px 10px;
+            background: var(--danger);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        
+        /* Content */
+        .content {
+            padding: 15px;
+        }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        /* Bottom Navigation */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg-secondary);
+            border-top: 2px solid var(--accent-gold);
+            display: flex;
+            justify-content: space-around;
+            padding: 8px 0;
+            z-index: 1000;
+        }
+        
+        .nav-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 5px;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .nav-item.active {
+            color: var(--accent-gold);
+        }
+        
+        .nav-icon {
+            font-size: 20px;
+            margin-bottom: 3px;
+        }
+        
+        /* Cards */
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 12px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--accent-gold);
+        }
+        
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--accent-gold);
+            margin-bottom: 5px;
+        }
+        
+        .stat-detail {
+            font-size: 11px;
+            color: var(--success);
+        }
+        
+        /* Forms */
+        .form-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--accent-gold);
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .form-group { margin-bottom: 15px; }
+        
+        .form-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+        
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: inherit;
+        }
+        
+        .form-textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: var(--accent-gold);
+        }
+        
+        /* Buttons */
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border-radius: 8px;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .btn:active {
+            transform: scale(0.98);
+        }
+        
+        .btn-primary {
+            background: var(--accent-gold);
+            color: #000;
+        }
+        
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+        
+        .btn-success {
+            background: var(--success);
+            color: #fff;
+        }
+        
+        .btn-warning {
+            background: var(--warning);
+            color: #fff;
+        }
+        
+        .btn-info {
+            background: var(--info);
+            color: #fff;
+        }
+        
+        .btn-danger {
+            background: var(--danger);
+            color: #fff;
+        }
+        
+        .btn-sm {
+            padding: 8px 12px;
+            font-size: 12px;
+            width: auto;
+        }
+        
+        /* Tables */
+        .table-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            overflow-x: auto;
+            margin-bottom: 15px;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .table {
+            width: 100%;
+            min-width: 600px;
+            border-collapse: collapse;
+        }
+        
+        .table thead { background: var(--bg-secondary); }
+        
+        .table th {
+            padding: 12px 10px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--accent-gold);
+            text-transform: uppercase;
+            border-bottom: 2px solid var(--border-color);
+            white-space: nowrap;
+        }
+        
+        .table td {
+            padding: 12px 10px;
+            font-size: 12px;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        /* Badges */
+        .badge {
+            padding: 4px 10px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            display: inline-block;
+        }
+        
+        .badge-success {
+            background: rgba(76, 175, 80, 0.2);
+            color: var(--success);
+        }
+        
+        .badge-warning {
+            background: rgba(255, 152, 0, 0.2);
+            color: var(--warning);
+        }
+        
+        .badge-info {
+            background: rgba(33, 150, 243, 0.2);
+            color: var(--info);
+        }
+        
+        .badge-danger {
+            background: rgba(244, 67, 54, 0.2);
+            color: var(--danger);
+        }
+        
+        /* Filters */
+        .filter-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 15px;
+        }
+        
+        /* Summary Box */
+        .summary-box {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, #1a1a1a 100%);
+            border: 2px solid var(--accent-gold);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .summary-row:last-child {
+            border-bottom: none;
+            border-top: 2px solid var(--accent-gold);
+            margin-top: 10px;
+            padding-top: 15px;
+        }
+        
+        .summary-label {
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+        
+        .summary-value {
+            font-weight: 700;
+            font-size: 12px;
+        }
+        
+        .summary-final {
+            font-size: 24px;
+            color: var(--accent-gold);
+        }
+        
+        /* File Upload */
+        .file-upload {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        
+        .file-upload input[type="file"] { display: none; }
+        
+        .file-preview {
+            margin-top: 10px;
+            max-width: 150px;
+            border-radius: 8px;
+        }
+        
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+        
+        /* Scroll Hint */
+        .scroll-hint {
+            text-align: center;
+            padding: 8px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            background: var(--bg-secondary);
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-container">
+        <div class="login-box">
+            <div class="login-logo"><img src="zenith-logo.png" alt="Zenith" style="height: 50px; display: block; margin: 0 auto 10px;"></div>
+            <div class="login-subtitle">Sistema de Simulação - Mobile</div>
+            
+            <div class="form-group">
+                <label class="form-label">Usuário</label>
+                <input type="text" class="form-input" id="loginUser" placeholder="Digite seu usuário">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Senha</label>
+                <input type="password" class="form-input" id="loginPass" placeholder="Digite sua senha">
+            </div>
+            
+            <button class="btn btn-primary" onclick="fazerLogin()">🔐 Entrar</button>
+            
+            <div style="margin-top: 15px; text-align: center; font-size: 11px; color: var(--text-secondary);">
+                <strong>Acesso:</strong> admin / admin123
+            </div>
+        </div>
+    </div>
+    
+    <!-- Main App -->
+    <div id="appContainer" class="app-container">
+        <!-- Header -->
+        <div class="mobile-header">
+            <div class="header-top">
+                <div class="logo"><img src="zenith-logo.png" alt="Zenith" style="height: 32px;"></div>
+                <div class="user-info">
+                    <div class="user-name" id="userName">Admin</div>
+                    <div class="user-role" id="userRole">Administrador</div>
+                    <button class="btn-logout" onclick="fazerLogout()">Sair</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Content -->
+        <div class="content">
+            <!-- Dashboard Tab -->
+            <div id="dashboard" class="tab-content active">
+                <div class="stat-card">
+                    <div class="stat-label">Cotações em Aberto</div>
+                    <div class="stat-value" id="totalAberto">0</div>
+                    <div class="stat-detail">Em análise + Aguardando</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-label">Cotações Fechadas</div>
+                    <div class="stat-value" id="totalFechado">0</div>
+                    <div class="stat-detail">Este mês</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-label">Valor Total</div>
+                    <div class="stat-value" id="valorTotal">R$ 0</div>
+                    <div class="stat-detail">Cotações fechadas</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-label">Clientes Ativos</div>
+                    <div class="stat-value" id="totalClientes">0</div>
+                    <div class="stat-detail">Cadastrados</div>
+                </div>
+            </div>
+            
+            <!-- Nova Cotação Tab -->
+            <div id="nova-cotacao" class="tab-content">
+                <div class="form-section">
+                    <h3 class="section-title">📝 Dados da Cotação</h3>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Cliente *</label>
+                        <select class="form-select" id="cotacaoCliente">
+                            <option value="">Selecione um cliente</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Serviço *</label>
+                        <select class="form-select" id="cotacaoServico" onchange="calcularCotacao()">
+                            <option value="">Selecione um serviço</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Custo do Serviço</label>
+                        <input type="text" class="form-input" id="custoDisplay" readonly placeholder="Selecione um serviço">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Valor de Venda (R$) *</label>
+                        <input type="number" class="form-input" id="valorVenda" placeholder="0,00" oninput="calcularCotacao()">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Comissão (%)</label>
+                        <input type="number" class="form-input" id="comissao" placeholder="0" min="0" max="100" oninput="calcularCotacao()">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Observações</label>
+                        <textarea class="form-textarea" id="observacoes" placeholder="Observações adicionais (opcional)"></textarea>
+                    </div>
+                </div>
+                
+                <div class="summary-box">
+                    <h3 class="section-title">💰 Resumo</h3>
+                    
+                    <div class="summary-row">
+                        <span class="summary-label">Custo:</span>
+                        <span class="summary-value" id="resultCusto">R$ 0,00</span>
+                    </div>
+                    
+                    <div class="summary-row">
+                        <span class="summary-label">Venda:</span>
+                        <span class="summary-value" id="resultVenda">R$ 0,00</span>
+                    </div>
+                    
+                    <div class="summary-row">
+                        <span class="summary-label">Margem:</span>
+                        <span class="summary-value" style="color: var(--success);" id="resultMargem">R$ 0,00</span>
+                    </div>
+                    
+                    <div class="summary-row">
+                        <span class="summary-label">Comissão:</span>
+                        <span class="summary-value" style="color: var(--success);" id="resultComissao">R$ 0,00</span>
+                    </div>
+                    
+                    <div class="summary-row">
+                        <span class="summary-label">Valor Final:</span>
+                        <span class="summary-value summary-final" id="resultFinal">R$ 0,00</span>
+                    </div>
+                </div>
+                
+                <button class="btn btn-success" onclick="salvarCotacao('fechada')">✓ Fechar Cotação</button>
+                <button class="btn btn-warning" onclick="salvarCotacao('analise')">🔍 Em Análise</button>
+                <button class="btn btn-info" onclick="salvarCotacao('aguardando')">⏳ Aguardando Confirmação</button>
+            </div>
+            
+            <!-- Cotações em Aberto Tab -->
+            <div id="cotacoes-abertas" class="tab-content">
+                <div class="section-title">📋 Cotações em Aberto</div>
+                
+                <div class="filter-section">
+                    <div class="form-group">
+                        <input type="text" class="form-input" id="filtroAbertoBusca" placeholder="Buscar por cliente..." onkeyup="filtrarCotacoesAbertas()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <select class="form-select" id="filtroAbertoStatus" onchange="filtrarCotacoesAbertas()">
+                            <option value="">Todos os status</option>
+                            <option value="analise">Em Análise</option>
+                            <option value="aguardando">Aguardando Confirmação</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="scroll-hint">← Deslize para ver mais →</div>
+                
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Cliente</th>
+                                <th>Serviço</th>
+                                <th>Valor</th>
+                                <th>Status</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaCotacoesAbertas">
+                            <tr>
+                                <td colspan="6" class="empty-state">Nenhuma cotação em aberto</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Cotações Fechadas Tab -->
+            <div id="cotacoes-fechadas" class="tab-content">
+                <div class="section-title">✅ Cotações Fechadas</div>
+                
+                <div class="filter-section">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <input type="text" class="form-input" id="filtroFechadoBusca" placeholder="Buscar por cliente..." onkeyup="filtrarCotacoesFechadas()">
+                    </div>
+                </div>
+                
+                <div class="scroll-hint">← Deslize para ver mais →</div>
+                
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Cliente</th>
+                                <th>Serviço</th>
+                                <th>Valor</th>
+                                <th>Comissão</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaCotacoesFechadas">
+                            <tr>
+                                <td colspan="6" class="empty-state">Nenhuma cotação fechada</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Clientes Tab -->
+            <div id="clientes" class="tab-content">
+                <div class="section-title">👥 Clientes</div>
+                
+                <div class="scroll-hint">← Deslize para ver mais →</div>
+                
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Documento</th>
+                                <th>Contato</th>
+                                <th>Total</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaClientes">
+                            <tr>
+                                <td colspan="5" class="empty-state">Nenhum cliente cadastrado</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="form-section">
+                    <h3 class="section-title">➕ Novo Cliente</h3>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Nome/Razão Social *</label>
+                        <input type="text" class="form-input" id="clienteNome" placeholder="Nome completo">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">CPF/CNPJ *</label>
+                        <input type="text" class="form-input" id="clienteDoc" placeholder="000.000.000-00">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">E-mail</label>
+                        <input type="email" class="form-input" id="clienteEmail" placeholder="email@exemplo.com">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Telefone/WhatsApp *</label>
+                        <input type="text" class="form-input" id="clienteTelefone" placeholder="(00) 00000-0000">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Endereço</label>
+                        <input type="text" class="form-input" id="clienteEndereco" placeholder="Rua, número, cidade">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Observações</label>
+                        <textarea class="form-textarea" id="clienteObs" placeholder="Informações adicionais"></textarea>
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="salvarCliente()">💾 Salvar Cliente</button>
+                    <button class="btn btn-secondary" onclick="limparFormCliente()">🔄 Limpar</button>
+                </div>
+            </div>
+            
+            <!-- Admin Tab -->
+            <div id="admin" class="tab-content">
+                <div class="section-title">⚙️ Gerenciar Serviços</div>
+                
+                <div class="scroll-hint">← Deslize para ver mais →</div>
+                
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Serviço</th>
+                                <th>Tipo</th>
+                                <th>Custo</th>
+                                <th>Status</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelaServicos"></tbody>
+                    </table>
+                </div>
+                
+                <div class="form-section">
+                    <h3 class="section-title">➕ Adicionar/Editar</h3>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Nome do Serviço</label>
+                        <input type="text" class="form-input" id="adminNomeServico" placeholder="Nome do serviço">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Tipo de Custo</label>
+                        <select class="form-select" id="adminTipoCusto">
+                            <option value="fixo">Valor Fixo (R$)</option>
+                            <option value="percentual">Percentual (%)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Valor do Custo</label>
+                        <input type="number" class="form-input" id="adminCustoServico" placeholder="0" step="0.01">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Status</label>
+                        <select class="form-select" id="adminStatusServico">
+                            <option value="ativo">Ativo</option>
+                            <option value="inativo">Inativo</option>
+                        </select>
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="salvarServico()">💾 Salvar Serviço</button>
+                    <button class="btn btn-secondary" onclick="limparFormAdmin()">🔄 Limpar</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Bottom Navigation -->
+        <div class="bottom-nav">
+            <button class="nav-item active" onclick="switchTab('dashboard')">
+                <div class="nav-icon">📊</div>
+                <div>Dashboard</div>
+            </button>
+            <button class="nav-item" onclick="switchTab('nova-cotacao')">
+                <div class="nav-icon">➕</div>
+                <div>Nova</div>
+            </button>
+            <button class="nav-item" onclick="switchTab('cotacoes-abertas')">
+                <div class="nav-icon">📋</div>
+                <div>Abertas</div>
+            </button>
+            <button class="nav-item" onclick="switchTab('cotacoes-fechadas')">
+                <div class="nav-icon">✅</div>
+                <div>Fechadas</div>
+            </button>
+            <button class="nav-item" onclick="switchTab('clientes')">
+                <div class="nav-icon">👥</div>
+                <div>Clientes</div>
+            </button>
+            <button class="nav-item admin-only" onclick="switchTab('admin')">
+                <div class="nav-icon">⚙️</div>
+                <div>Admin</div>
+            </button>
+        </div>
+    </div>
+    
+    <script>
+        // Dados globais (mesma estrutura da versão desktop)
+        let usuarioLogado = null;
+        let servicos = [
+            { id: 1, nome: 'Conversão de Pix para Usdt', tipoCusto: 'percentual', custo: 3, status: 'ativo', dataAtualizacao: '04/12/2025' },
+            { id: 2, nome: 'Conversão Usdt para Pix', tipoCusto: 'percentual', custo: 3, status: 'ativo', dataAtualizacao: '04/12/2025' },
+            { id: 3, nome: 'Bancarizar Chão para Pix', tipoCusto: 'fixo', custo: 0, status: 'ativo', dataAtualizacao: '04/12/2025' },
+            { id: 4, nome: 'Bancarizar Chão para Usdt', tipoCusto: 'fixo', custo: 0, status: 'ativo', dataAtualizacao: '04/12/2025' },
+            { id: 5, nome: 'Pix para Chão', tipoCusto: 'fixo', custo: 0, status: 'ativo', dataAtualizacao: '04/12/2025' },
+            { id: 6, nome: 'Remessas Internacionais', tipoCusto: 'fixo', custo: 0, status: 'ativo', dataAtualizacao: '04/12/2025' }
+        ];
+        
+        let clientes = [];
+        let comerciais = [];
+        let cotacoes = [];
+        let servicoEditando = null;
+        let clienteEditando = null;
+        
+        // Login
+        function fazerLogin() {
+            const user = document.getElementById('loginUser').value;
+            const pass = document.getElementById('loginPass').value;
+            
+            if (user === 'admin' && pass === 'admin123') {
+                usuarioLogado = { nome: 'Administrador', tipo: 'admin' };
+                document.getElementById('userName').textContent = 'Admin';
+                document.getElementById('userRole').textContent = 'Administrador';
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('appContainer').classList.add('active');
+                carregarDados();
+            } else {
+                alert('❌ Usuário ou senha incorretos!');
+            }
+        }
+        
+        function fazerLogout() {
+            if (confirm('Deseja realmente sair?')) {
+                usuarioLogado = null;
+                document.getElementById('loginScreen').style.display = 'flex';
+                document.getElementById('appContainer').classList.remove('active');
+                document.getElementById('loginUser').value = '';
+                document.getElementById('loginPass').value = '';
+            }
+        }
+        
+        // Switch Tabs
+        function switchTab(tabName) {
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.closest('.nav-item').classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+            
+            window.scrollTo(0, 0);
+        }
+        
+        // Carregar dados
+        function carregarDados() {
+            carregarServicos();
+            carregarClientes();
+            carregarCotacoes();
+            atualizarDashboard();
+        }
+        
+        // Serviços
+        function carregarServicos() {
+            const selectServico = document.getElementById('cotacaoServico');
+            selectServico.innerHTML = '<option value="">Selecione um serviço</option>';
+            
+            servicos.filter(s => s.status === 'ativo').forEach(servico => {
+                const option = document.createElement('option');
+                option.value = servico.id;
+                const custoDisplay = servico.tipoCusto === 'percentual' 
+                    ? `${servico.custo}%` 
+                    : `R$ ${servico.custo.toFixed(2)}`;
+                option.textContent = `${servico.nome} - ${custoDisplay}`;
+                selectServico.appendChild(option);
+            });
+            
+            const tabelaServicos = document.getElementById('tabelaServicos');
+            tabelaServicos.innerHTML = '';
+            
+            servicos.forEach(servico => {
+                const tr = document.createElement('tr');
+                const custoDisplay = servico.tipoCusto === 'percentual' 
+                    ? `${servico.custo}%` 
+                    : `R$ ${servico.custo.toFixed(2)}`;
+                const tipoDisplay = servico.tipoCusto === 'percentual' ? '%' : 'R$';
+                
+                tr.innerHTML = `
+                    <td><strong>${servico.nome}</strong></td>
+                    <td><span class="badge badge-info">${tipoDisplay}</span></td>
+                    <td>${custoDisplay}</td>
+                    <td><span class="badge badge-${servico.status === 'ativo' ? 'success' : 'warning'}">${servico.status.toUpperCase()}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-warning" onclick="editarServico(${servico.id})">✏️</button>
+                    </td>
+                `;
+                tabelaServicos.appendChild(tr);
+            });
+        }
+        
+        function editarServico(id) {
+            const servico = servicos.find(s => s.id === id);
+            if (servico) {
+                servicoEditando = id;
+                document.getElementById('adminNomeServico').value = servico.nome;
+                document.getElementById('adminTipoCusto').value = servico.tipoCusto;
+                document.getElementById('adminCustoServico').value = servico.custo;
+                document.getElementById('adminStatusServico').value = servico.status;
+                window.scrollTo(0, document.body.scrollHeight);
+            }
+        }
+        
+        function salvarServico() {
+            const nome = document.getElementById('adminNomeServico').value;
+            const tipoCusto = document.getElementById('adminTipoCusto').value;
+            const custo = parseFloat(document.getElementById('adminCustoServico').value) || 0;
+            const status = document.getElementById('adminStatusServico').value;
+            
+            if (!nome) {
+                alert('Por favor, informe o nome do serviço!');
+                return;
+            }
+            
+            const hoje = new Date().toLocaleDateString('pt-BR');
+            
+            if (servicoEditando) {
+                const servico = servicos.find(s => s.id === servicoEditando);
+                if (servico) {
+                    servico.nome = nome;
+                    servico.tipoCusto = tipoCusto;
+                    servico.custo = custo;
+                    servico.status = status;
+                    servico.dataAtualizacao = hoje;
+                }
+                servicoEditando = null;
+            } else {
+                const novoId = Math.max(...servicos.map(s => s.id)) + 1;
+                servicos.push({ id: novoId, nome, tipoCusto, custo, status, dataAtualizacao: hoje });
+            }
+            
+            carregarServicos();
+            limparFormAdmin();
+            alert('✓ Serviço salvo com sucesso!');
+        }
+        
+        function limparFormAdmin() {
+            document.getElementById('adminNomeServico').value = '';
+            document.getElementById('adminTipoCusto').value = 'fixo';
+            document.getElementById('adminCustoServico').value = '';
+            document.getElementById('adminStatusServico').value = 'ativo';
+            servicoEditando = null;
+        }
+        
+        // Clientes
+        function carregarClientes() {
+            const selectCliente = document.getElementById('cotacaoCliente');
+            selectCliente.innerHTML = '<option value="">Selecione um cliente</option>';
+            
+            clientes.forEach(cliente => {
+                const option = document.createElement('option');
+                option.value = cliente.id;
+                option.textContent = cliente.nome;
+                selectCliente.appendChild(option);
+            });
+            
+            const tabela = document.getElementById('tabelaClientes');
+            
+            if (clientes.length === 0) {
+                tabela.innerHTML = '<tr><td colspan="5" class="empty-state">Nenhum cliente cadastrado</td></tr>';
+            } else {
+                tabela.innerHTML = '';
+                clientes.forEach(cliente => {
+                    const totalMovimentado = calcularTotalMovimentado(cliente.id);
+                    
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td><strong>${cliente.nome}</strong></td>
+                        <td>${cliente.documento}</td>
+                        <td>${cliente.telefone}</td>
+                        <td style="color: var(--accent-gold); font-weight: 700;">R$ ${totalMovimentado.toFixed(2)}</td>
+                        <td>
+                            <button class="btn btn-sm btn-info" onclick="verHistoricoCliente(${cliente.id})">👁️</button>
+                        </td>
+                    `;
+                    tabela.appendChild(tr);
+                });
+            }
+        }
+        
+        function calcularTotalMovimentado(clienteId) {
+            return cotacoes
+                .filter(c => c.clienteId === clienteId && c.status === 'fechada')
+                .reduce((total, c) => total + c.valorVenda, 0);
+        }
+        
+        function salvarCliente() {
+            const nome = document.getElementById('clienteNome').value;
+            const documento = document.getElementById('clienteDoc').value;
+            const email = document.getElementById('clienteEmail').value;
+            const telefone = document.getElementById('clienteTelefone').value;
+            const endereco = document.getElementById('clienteEndereco').value;
+            const obs = document.getElementById('clienteObs').value;
+            
+            if (!nome || !documento || !telefone) {
+                alert('Por favor, preencha os campos obrigatórios!');
+                return;
+            }
+            
+            const hoje = new Date().toLocaleDateString('pt-BR');
+            const novoId = clientes.length > 0 ? Math.max(...clientes.map(c => c.id)) + 1 : 1;
+            
+            clientes.push({
+                id: novoId,
+                nome,
+                documento,
+                email,
+                telefone,
+                endereco,
+                obs,
+                dataCadastro: hoje
+            });
+            
+            carregarClientes();
+            limparFormCliente();
+            atualizarDashboard();
+            alert('✓ Cliente salvo com sucesso!');
+        }
+        
+        function verHistoricoCliente(id) {
+            const cliente = clientes.find(c => c.id === id);
+            const cotacoesCliente = cotacoes.filter(c => c.clienteId === id);
+            
+            let mensagem = `HISTÓRICO: ${cliente.nome}\n\n`;
+            mensagem += `Total: R$ ${calcularTotalMovimentado(id).toFixed(2)}\n`;
+            mensagem += `Cotações: ${cotacoesCliente.length}\n\n`;
+            
+            if (cotacoesCliente.length > 0) {
+                cotacoesCliente.forEach(cot => {
+                    const statusLabel = cot.status === 'fechada' ? 'Fechada' : 
+                                       cot.status === 'analise' ? 'Em Análise' : 'Aguardando';
+                    mensagem += `${cot.data} - ${cot.servicoNome}\n`;
+                    mensagem += `R$ ${cot.valorVenda.toFixed(2)} - ${statusLabel}\n\n`;
+                });
+            }
+            
+            alert(mensagem);
+        }
+        
+        function limparFormCliente() {
+            document.getElementById('clienteNome').value = '';
+            document.getElementById('clienteDoc').value = '';
+            document.getElementById('clienteEmail').value = '';
+            document.getElementById('clienteTelefone').value = '';
+            document.getElementById('clienteEndereco').value = '';
+            document.getElementById('clienteObs').value = '';
+            clienteEditando = null;
+        }
+        
+        // Cotações
+        function calcularCotacao() {
+            const servicoId = parseInt(document.getElementById('cotacaoServico').value);
+            const valorVenda = parseFloat(document.getElementById('valorVenda').value) || 0;
+            const comissaoPercent = parseFloat(document.getElementById('comissao').value) || 0;
+            
+            if (!servicoId) {
+                document.getElementById('custoDisplay').value = 'Selecione um serviço';
+                return;
+            }
+            
+            const servico = servicos.find(s => s.id === servicoId);
+            if (!servico) return;
+            
+            let custoReal = 0;
+            let custoDisplay = '';
+            
+            if (servico.tipoCusto === 'percentual') {
+                custoReal = valorVenda * (servico.custo / 100);
+                custoDisplay = `${servico.custo}% = R$ ${custoReal.toFixed(2)}`;
+            } else {
+                custoReal = servico.custo;
+                custoDisplay = `R$ ${custoReal.toFixed(2)}`;
+            }
+            
+            document.getElementById('custoDisplay').value = custoDisplay;
+            
+            const margem = valorVenda - custoReal;
+            const comissao = valorVenda * (comissaoPercent / 100);
+            
+            document.getElementById('resultCusto').textContent = 'R$ ' + custoReal.toFixed(2);
+            document.getElementById('resultVenda').textContent = 'R$ ' + valorVenda.toFixed(2);
+            document.getElementById('resultMargem').textContent = 'R$ ' + margem.toFixed(2);
+            document.getElementById('resultComissao').textContent = 'R$ ' + comissao.toFixed(2);
+            document.getElementById('resultFinal').textContent = 'R$ ' + valorVenda.toFixed(2);
+        }
+        
+        function salvarCotacao(status) {
+            const clienteId = parseInt(document.getElementById('cotacaoCliente').value);
+            const servicoId = parseInt(document.getElementById('cotacaoServico').value);
+            const valorVenda = parseFloat(document.getElementById('valorVenda').value) || 0;
+            const comissaoPercent = parseFloat(document.getElementById('comissao').value) || 0;
+            const observacoes = document.getElementById('observacoes').value;
+            
+            if (!clienteId || !servicoId || !valorVenda) {
+                alert('Por favor, preencha todos os campos obrigatórios!');
+                return;
+            }
+            
+            const cliente = clientes.find(c => c.id === clienteId);
+            const servico = servicos.find(s => s.id === servicoId);
+            
+            let custoReal = 0;
+            if (servico.tipoCusto === 'percentual') {
+                custoReal = valorVenda * (servico.custo / 100);
+            } else {
+                custoReal = servico.custo;
+            }
+            
+            const margem = valorVenda - custoReal;
+            const comissao = valorVenda * (comissaoPercent / 100);
+            const hoje = new Date().toLocaleDateString('pt-BR');
+            const novoId = cotacoes.length > 0 ? Math.max(...cotacoes.map(c => c.id)) + 1 : 1;
+            
+            cotacoes.push({
+                id: novoId,
+                clienteId,
+                clienteNome: cliente.nome,
+                servicoId,
+                servicoNome: servico.nome,
+                custo: custoReal,
+                valorVenda,
+                margem,
+                comissaoPercent,
+                comissao,
+                observacoes,
+                status,
+                data: hoje
+            });
+            
+            carregarCotacoes();
+            limparFormCotacao();
+            atualizarDashboard();
+            
+            const statusMsg = status === 'fechada' ? 'fechada' : 
+                            status === 'analise' ? 'Em Análise' : 
+                            'Aguardando Confirmação';
+            alert(`✓ Cotação ${statusMsg}!`);
+        }
+        
+        function limparFormCotacao() {
+            document.getElementById('cotacaoCliente').value = '';
+            document.getElementById('cotacaoServico').value = '';
+            document.getElementById('custoDisplay').value = '';
+            document.getElementById('valorVenda').value = '';
+            document.getElementById('comissao').value = '';
+            document.getElementById('observacoes').value = '';
+            calcularCotacao();
+        }
+        
+        function carregarCotacoes() {
+            carregarCotacoesAbertas();
+            carregarCotacoesFechadas();
+        }
+        
+        function carregarCotacoesAbertas() {
+            const tabela = document.getElementById('tabelaCotacoesAbertas');
+            const abertas = cotacoes.filter(c => c.status === 'analise' || c.status === 'aguardando');
+            
+            if (abertas.length === 0) {
+                tabela.innerHTML = '<tr><td colspan="6" class="empty-state">Nenhuma cotação em aberto</td></tr>';
+            } else {
+                tabela.innerHTML = '';
+                abertas.forEach(cot => {
+                    const tr = document.createElement('tr');
+                    const statusLabel = cot.status === 'analise' ? 'Análise' : 'Aguardando';
+                    const badgeClass = cot.status === 'analise' ? 'badge-warning' : 'badge-info';
+                    
+                    tr.innerHTML = `
+                        <td>${cot.data}</td>
+                        <td><strong>${cot.clienteNome}</strong></td>
+                        <td>${cot.servicoNome}</td>
+                        <td style="color: var(--accent-gold);">R$ ${cot.valorVenda.toFixed(2)}</td>
+                        <td><span class="badge ${badgeClass}">${statusLabel}</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-success" onclick="mudarStatusCotacao(${cot.id}, 'fechada')">✓</button>
+                        </td>
+                    `;
+                    tabela.appendChild(tr);
+                });
+            }
+        }
+        
+        function carregarCotacoesFechadas() {
+            const tabela = document.getElementById('tabelaCotacoesFechadas');
+            const fechadas = cotacoes.filter(c => c.status === 'fechada');
+            
+            if (fechadas.length === 0) {
+                tabela.innerHTML = '<tr><td colspan="6" class="empty-state">Nenhuma cotação fechada</td></tr>';
+            } else {
+                tabela.innerHTML = '';
+                fechadas.forEach(cot => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${cot.data}</td>
+                        <td><strong>${cot.clienteNome}</strong></td>
+                        <td>${cot.servicoNome}</td>
+                        <td style="color: var(--accent-gold);">R$ ${cot.valorVenda.toFixed(2)}</td>
+                        <td style="color: var(--success);">R$ ${cot.comissao.toFixed(2)}</td>
+                        <td>-</td>
+                    `;
+                    tabela.appendChild(tr);
+                });
+            }
+        }
+        
+        function mudarStatusCotacao(id, novoStatus) {
+            const cotacao = cotacoes.find(c => c.id === id);
+            if (cotacao) {
+                cotacao.status = novoStatus;
+                carregarCotacoes();
+                atualizarDashboard();
+                alert('✓ Cotação fechada!');
+            }
+        }
+        
+        function filtrarCotacoesAbertas() {
+            const busca = document.getElementById('filtroAbertoBusca').value.toLowerCase();
+            const status = document.getElementById('filtroAbertoStatus').value;
+            
+            let abertas = cotacoes.filter(c => c.status === 'analise' || c.status === 'aguardando');
+            
+            if (busca) {
+                abertas = abertas.filter(c => c.clienteNome.toLowerCase().includes(busca));
+            }
+            
+            if (status) {
+                abertas = abertas.filter(c => c.status === status);
+            }
+            
+            const tabela = document.getElementById('tabelaCotacoesAbertas');
+            
+            if (abertas.length === 0) {
+                tabela.innerHTML = '<tr><td colspan="6" class="empty-state">Nenhuma cotação encontrada</td></tr>';
+            } else {
+                tabela.innerHTML = '';
+                abertas.forEach(cot => {
+                    const tr = document.createElement('tr');
+                    const statusLabel = cot.status === 'analise' ? 'Análise' : 'Aguardando';
+                    const badgeClass = cot.status === 'analise' ? 'badge-warning' : 'badge-info';
+                    
+                    tr.innerHTML = `
+                        <td>${cot.data}</td>
+                        <td><strong>${cot.clienteNome}</strong></td>
+                        <td>${cot.servicoNome}</td>
+                        <td style="color: var(--accent-gold);">R$ ${cot.valorVenda.toFixed(2)}</td>
+                        <td><span class="badge ${badgeClass}">${statusLabel}</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-success" onclick="mudarStatusCotacao(${cot.id}, 'fechada')">✓</button>
+                        </td>
+                    `;
+                    tabela.appendChild(tr);
+                });
+            }
+        }
+        
+        function filtrarCotacoesFechadas() {
+            const busca = document.getElementById('filtroFechadoBusca').value.toLowerCase();
+            
+            let fechadas = cotacoes.filter(c => c.status === 'fechada');
+            
+            if (busca) {
+                fechadas = fechadas.filter(c => c.clienteNome.toLowerCase().includes(busca));
+            }
+            
+            const tabela = document.getElementById('tabelaCotacoesFechadas');
+            
+            if (fechadas.length === 0) {
+                tabela.innerHTML = '<tr><td colspan="6" class="empty-state">Nenhuma cotação encontrada</td></tr>';
+            } else {
+                tabela.innerHTML = '';
+                fechadas.forEach(cot => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${cot.data}</td>
+                        <td><strong>${cot.clienteNome}</strong></td>
+                        <td>${cot.servicoNome}</td>
+                        <td style="color: var(--accent-gold);">R$ ${cot.valorVenda.toFixed(2)}</td>
+                        <td style="color: var(--success);">R$ ${cot.comissao.toFixed(2)}</td>
+                        <td>-</td>
+                    `;
+                    tabela.appendChild(tr);
+                });
+            }
+        }
+        
+        // Dashboard
+        function atualizarDashboard() {
+            const abertas = cotacoes.filter(c => c.status === 'analise' || c.status === 'aguardando').length;
+            const fechadas = cotacoes.filter(c => c.status === 'fechada').length;
+            const valorTotal = cotacoes
+                .filter(c => c.status === 'fechada')
+                .reduce((total, c) => total + c.valorVenda, 0);
+            
+            document.getElementById('totalAberto').textContent = abertas;
+            document.getElementById('totalFechado').textContent = fechadas;
+            document.getElementById('valorTotal').textContent = 'R$ ' + valorTotal.toFixed(2);
+            document.getElementById('totalClientes').textContent = clientes.length;
+        }
+    </script>
+</body>
+</html>
