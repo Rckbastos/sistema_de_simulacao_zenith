@@ -319,6 +319,24 @@
             width: 100%;
             justify-content: center;
         }
+
+        .permission-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.02);
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .permission-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text-primary);
+        }
         
         .btn-group {
             display: flex;
@@ -515,6 +533,8 @@
             <button class="btn btn-primary btn-block" onclick="fazerLogin()">🔐 Entrar</button>
             
             <div style="margin-top: 20px; text-align: center; font-size: 12px; color: var(--text-secondary);">
+                Use <strong>admin / admin123</strong> para acesso completo.<br>
+                Comerciais: informe seu <strong>CPF ou chave PIX</strong> com a senha definida.
             </div>
         </div>
     </div>
@@ -537,13 +557,13 @@
             
             <!-- Tabs -->
             <div class="tabs" id="tabsContainer">
-                <button class="tab active" onclick="switchTab('dashboard')">📊 Dashboard</button>
-                <button class="tab" onclick="switchTab('nova-cotacao')">➕ Nova Cotação</button>
-                <button class="tab" onclick="switchTab('cotacoes-abertas')">📋 Cotações em Aberto</button>
-                <button class="tab" onclick="switchTab('cotacoes-fechadas')">✅ Cotações Fechadas</button>
-                <button class="tab" onclick="switchTab('clientes')">👥 Clientes</button>
-                <button class="tab admin-only" onclick="switchTab('comerciais')">🤝 Comerciais</button>
-                <button class="tab admin-only" onclick="switchTab('admin')">⚙️ Admin - Serviços</button>
+                <button class="tab active" data-tab="dashboard" data-admin-only="true" onclick="switchTab('dashboard', this)">📊 Dashboard</button>
+                <button class="tab" data-tab="nova-cotacao" onclick="switchTab('nova-cotacao', this)">➕ Nova Cotação</button>
+                <button class="tab" data-tab="cotacoes-abertas" onclick="switchTab('cotacoes-abertas', this)">📋 Cotações em Aberto</button>
+                <button class="tab" data-tab="cotacoes-fechadas" onclick="switchTab('cotacoes-fechadas', this)">✅ Cotações Fechadas</button>
+                <button class="tab" data-tab="clientes" onclick="switchTab('clientes', this)">👥 Clientes</button>
+                <button class="tab admin-only" data-tab="comerciais" data-admin-only="true" onclick="switchTab('comerciais', this)">🤝 Comerciais</button>
+                <button class="tab admin-only" data-tab="admin" data-admin-only="true" onclick="switchTab('admin', this)">⚙️ Admin - Serviços</button>
             </div>
             
             <!-- Dashboard Tab -->
@@ -816,6 +836,7 @@
                                 <th>Nome</th>
                                 <th>CPF</th>
                                 <th>Chave PIX</th>
+                                <th>Permissões</th>
                                 <th>Status</th>
                                 <th>Data Cadastro</th>
                                 <th>Ações</th>
@@ -823,7 +844,7 @@
                         </thead>
                         <tbody id="tabelaComerciais">
                             <tr>
-                                <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                                <td colspan="7" style="text-align: center; padding: 40px; color: var(--text-secondary);">
                                     Nenhum comercial cadastrado
                                 </td>
                             </tr>
@@ -877,6 +898,36 @@
                             <option value="ativo">Ativo</option>
                             <option value="inativo">Inativo</option>
                         </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Senha do Comercial *</label>
+                        <input type="password" class="form-input" id="comercialSenha" placeholder="Defina uma senha segura">
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;">
+                            Deixe em branco ao editar para manter a senha atual.
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Permissões de Acesso *</label>
+                        <div class="permission-list">
+                            <label class="permission-item">
+                                <input type="checkbox" id="permNovaCotacao" checked>
+                                Nova Cotação
+                            </label>
+                            <label class="permission-item">
+                                <input type="checkbox" id="permCotacoesAbertas" checked>
+                                Cotações em Aberto
+                            </label>
+                            <label class="permission-item">
+                                <input type="checkbox" id="permCotacoesFechadas" checked>
+                                Cotações Fechadas
+                            </label>
+                            <label class="permission-item">
+                                <input type="checkbox" id="permClientes" checked>
+                                Clientes
+                            </label>
+                        </div>
                     </div>
                     
                     <button class="btn btn-primary" onclick="salvarComercial()">💾 Salvar Comercial</button>
@@ -951,6 +1002,19 @@
             cotacoes: 'zenith-cotacoes'
         };
         const STORAGE_ENABLED = typeof Storage !== 'undefined';
+        const ADMIN_CREDENTIALS = { username: 'admin', password: 'admin123' };
+        const PERMISSOES_LABELS = {
+            novaCotacao: 'Nova Cotação',
+            cotacoesAbertas: 'Cotações em Aberto',
+            cotacoesFechadas: 'Cotações Fechadas',
+            clientes: 'Clientes'
+        };
+        const TAB_PERMISSION_MAP = {
+            'nova-cotacao': 'novaCotacao',
+            'cotacoes-abertas': 'cotacoesAbertas',
+            'cotacoes-fechadas': 'cotacoesFechadas',
+            'clientes': 'clientes'
+        };
 
         let usuarioLogado = null;
 
@@ -973,6 +1037,15 @@
         let servicoEditando = null;
         let comercialEditando = null;
         let clienteEditando = null;
+
+        function getDefaultPermissoes() {
+            return {
+                novaCotacao: true,
+                cotacoesAbertas: true,
+                cotacoesFechadas: true,
+                clientes: true
+            };
+        }
 
         function cloneData(data) {
             return JSON.parse(JSON.stringify(data));
@@ -1006,21 +1079,112 @@
                 console.warn('Falha ao salvar dados', error);
             }
         }
+
+        function normalizarPermissoes(permissoes) {
+            const base = getDefaultPermissoes();
+            Object.keys(base).forEach(key => {
+                base[key] = typeof permissoes?.[key] === 'boolean' ? permissoes[key] : base[key];
+            });
+            return base;
+        }
+
+        function getPermissoesFromForm() {
+            return {
+                novaCotacao: document.getElementById('permNovaCotacao').checked,
+                cotacoesAbertas: document.getElementById('permCotacoesAbertas').checked,
+                cotacoesFechadas: document.getElementById('permCotacoesFechadas').checked,
+                clientes: document.getElementById('permClientes').checked
+            };
+        }
+
+        function preencherPermissoesForm(permissoes) {
+            const dados = normalizarPermissoes(permissoes);
+            document.getElementById('permNovaCotacao').checked = dados.novaCotacao;
+            document.getElementById('permCotacoesAbertas').checked = dados.cotacoesAbertas;
+            document.getElementById('permCotacoesFechadas').checked = dados.cotacoesFechadas;
+            document.getElementById('permClientes').checked = dados.clientes;
+        }
+
+        function definirPermissoesPadraoForm() {
+            preencherPermissoesForm(getDefaultPermissoes());
+        }
+
+        function podeAcessarTab(tabName) {
+            if (!usuarioLogado) return false;
+            if (usuarioLogado.tipo === 'admin') return true;
+            const permKey = TAB_PERMISSION_MAP[tabName];
+            if (!permKey) return false;
+            return Boolean(usuarioLogado.permissoes?.[permKey]);
+        }
+
+        function aplicarPermissoesNasTabs() {
+            const isAdmin = usuarioLogado?.tipo === 'admin';
+            document.querySelectorAll('[data-admin-only="true"]').forEach(el => {
+                el.style.display = isAdmin ? '' : 'none';
+            });
+
+            document.querySelectorAll('.tab').forEach(btn => {
+                const tabName = btn.getAttribute('data-tab');
+                if (isAdmin) {
+                    btn.style.display = '';
+                    return;
+                }
+                const permKey = TAB_PERMISSION_MAP[tabName];
+                if (!permKey) {
+                    btn.style.display = 'none';
+                    return;
+                }
+                btn.style.display = usuarioLogado?.permissoes?.[permKey] ? '' : 'none';
+            });
+        }
+
+        function obterPrimeiraAbaPermitida() {
+            if (usuarioLogado?.tipo === 'admin') {
+                return 'dashboard';
+            }
+            const ordem = ['nova-cotacao', 'cotacoes-abertas', 'cotacoes-fechadas', 'clientes'];
+            for (const tab of ordem) {
+                if (podeAcessarTab(tab)) {
+                    return tab;
+                }
+            }
+            return null;
+        }
         
         // Login
         function fazerLogin() {
-            const user = document.getElementById('loginUser').value;
+            const user = document.getElementById('loginUser').value.trim();
             const pass = document.getElementById('loginPass').value;
             
-            if (user === 'admin' && pass === 'admin123') {
+            if (user === ADMIN_CREDENTIALS.username && pass === ADMIN_CREDENTIALS.password) {
                 usuarioLogado = { nome: 'Administrador', tipo: 'admin' };
                 document.getElementById('userName').textContent = 'Administrador';
                 document.getElementById('userRole').textContent = 'Admin';
-                document.getElementById('loginScreen').style.display = 'none';
-                document.getElementById('appContainer').classList.add('active');
-                carregarDados();
             } else {
-                alert('❌ Usuário ou senha incorretos!');
+                const comercial = comerciais.find(c => (c.cpf === user || c.pix === user) && c.senha === pass);
+                if (comercial) {
+                    usuarioLogado = { 
+                        nome: comercial.nome, 
+                        tipo: 'comercial',
+                        permissoes: normalizarPermissoes(comercial.permissoes)
+                    };
+                    document.getElementById('userName').textContent = comercial.nome;
+                    document.getElementById('userRole').textContent = 'Comercial';
+                } else {
+                    alert('❌ Usuário ou senha incorretos!');
+                    return;
+                }
+            }
+            
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('appContainer').classList.add('active');
+            carregarDados();
+            aplicarPermissoesNasTabs();
+            const abaInicial = obterPrimeiraAbaPermitida();
+            if (abaInicial) {
+                switchTab(abaInicial);
+            } else {
+                alert('Nenhuma permissão atribuída a este comercial. Contate um administrador.');
             }
         }
         
@@ -1035,12 +1199,26 @@
         }
         
         // Switch Tabs
-        function switchTab(tabName) {
+        function switchTab(tabName, triggerEl) {
+            if (!podeAcessarTab(tabName)) {
+                alert('Você não possui permissão para acessar esta área.');
+                return;
+            }
+            
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             
-            event.target.classList.add('active');
-            document.getElementById(tabName).classList.add('active');
+            if (triggerEl) {
+                triggerEl.classList.add('active');
+            } else {
+                const tabButton = document.querySelector(`.tab[data-tab="${tabName}"]`);
+                if (tabButton) tabButton.classList.add('active');
+            }
+            
+            const section = document.getElementById(tabName);
+            if (section) {
+                section.classList.add('active');
+            }
         }
         
         // Carregar todos os dados
@@ -1051,6 +1229,8 @@
             carregarCotacoes();
             atualizarDashboard();
         }
+
+        definirPermissoesPadraoForm();
         
         // Serviços
         function carregarServicos() {
@@ -1311,11 +1491,18 @@
             } else {
                 tabela.innerHTML = '';
                 comerciais.forEach(comercial => {
+                    const permissoes = normalizarPermissoes(comercial.permissoes);
+                    const permissaoBadges = Object.entries(PERMISSOES_LABELS)
+                        .filter(([key]) => permissoes[key])
+                        .map(([, label]) => `<span class="badge badge-info">${label}</span>`)
+                        .join(' ');
+                    
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td><strong>${comercial.nome}</strong></td>
                         <td>${comercial.cpf}</td>
                         <td>${comercial.pix}</td>
+                        <td>${permissaoBadges || '<span class="badge badge-warning">Sem acesso</span>'}</td>
                         <td><span class="badge badge-${comercial.status === 'ativo' ? 'success' : 'warning'}">${comercial.status.toUpperCase()}</span></td>
                         <td>${comercial.dataCadastro}</td>
                         <td>
@@ -1335,6 +1522,8 @@
             const status = document.getElementById('comercialStatus').value;
             const doc = document.getElementById('comercialDoc').files[0];
             const selfie = document.getElementById('comercialSelfie').files[0];
+            const senha = document.getElementById('comercialSenha').value;
+            const permissoes = getPermissoesFromForm();
             
             if (!nome || !cpf || !pix) {
                 alert('Por favor, preencha todos os campos obrigatórios!');
@@ -1350,6 +1539,13 @@
                     comercial.cpf = cpf;
                     comercial.pix = pix;
                     comercial.status = status;
+                    comercial.permissoes = permissoes;
+                    if (senha) {
+                        comercial.senha = senha;
+                    }
+                    if (!comercial.documentos) {
+                        comercial.documentos = { doc: '', selfie: '' };
+                    }
                     if (doc) {
                         comercial.documentos.doc = doc.name;
                     }
@@ -1359,8 +1555,8 @@
                 }
                 comercialEditando = null;
             } else {
-                if (!doc || !selfie) {
-                    alert('Para cadastrar um novo comercial, anexe documento e selfie.');
+                if (!doc || !selfie || !senha) {
+                    alert('Para cadastrar um novo comercial, anexos e senha são obrigatórios.');
                     return;
                 }
                 const novoId = comerciais.length > 0 ? Math.max(...comerciais.map(c => c.id)) + 1 : 1;
@@ -1370,6 +1566,8 @@
                     cpf,
                     pix,
                     status,
+                    senha,
+                    permissoes,
                     dataCadastro: hoje,
                     documentos: { doc: doc.name, selfie: selfie.name }
                 });
@@ -1393,6 +1591,8 @@
                 document.getElementById('comercialSelfie').value = '';
                 document.getElementById('previewDoc').style.display = 'none';
                 document.getElementById('previewSelfie').style.display = 'none';
+                document.getElementById('comercialSenha').value = '';
+                preencherPermissoesForm(comercial.permissoes);
                 switchTab('comerciais');
             }
         }
@@ -1415,6 +1615,8 @@
             document.getElementById('comercialSelfie').value = '';
             document.getElementById('previewDoc').style.display = 'none';
             document.getElementById('previewSelfie').style.display = 'none';
+            document.getElementById('comercialSenha').value = '';
+            definirPermissoesPadraoForm();
             comercialEditando = null;
         }
         
