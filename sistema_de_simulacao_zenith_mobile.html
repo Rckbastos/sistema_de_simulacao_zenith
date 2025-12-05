@@ -832,8 +832,16 @@
     
     <script>
         // Dados globais (mesma estrutura da versão desktop)
+        const STORAGE_KEYS = {
+            servicos: 'zenith-servicos',
+            clientes: 'zenith-clientes',
+            comerciais: 'zenith-comerciais',
+            cotacoes: 'zenith-cotacoes'
+        };
+        const STORAGE_ENABLED = typeof Storage !== 'undefined';
+
         let usuarioLogado = null;
-        let servicos = [
+        const defaultServicos = [
             { id: 1, nome: 'Conversão de Pix para Usdt', tipoCusto: 'percentual', custo: 3, status: 'ativo', dataAtualizacao: '04/12/2025' },
             { id: 2, nome: 'Conversão Usdt para Pix', tipoCusto: 'percentual', custo: 3, status: 'ativo', dataAtualizacao: '04/12/2025' },
             { id: 3, nome: 'Bancarizar Chão para Pix', tipoCusto: 'fixo', custo: 0, status: 'ativo', dataAtualizacao: '04/12/2025' },
@@ -841,12 +849,47 @@
             { id: 5, nome: 'Pix para Chão', tipoCusto: 'fixo', custo: 0, status: 'ativo', dataAtualizacao: '04/12/2025' },
             { id: 6, nome: 'Remessas Internacionais', tipoCusto: 'fixo', custo: 0, status: 'ativo', dataAtualizacao: '04/12/2025' }
         ];
+        const defaultClientes = [];
+        const defaultComerciais = [];
+        const defaultCotacoes = [];
         
-        let clientes = [];
-        let comerciais = [];
-        let cotacoes = [];
+        let servicos = loadFromStorage(STORAGE_KEYS.servicos, defaultServicos);
+        let clientes = loadFromStorage(STORAGE_KEYS.clientes, defaultClientes);
+        let comerciais = loadFromStorage(STORAGE_KEYS.comerciais, defaultComerciais);
+        let cotacoes = loadFromStorage(STORAGE_KEYS.cotacoes, defaultCotacoes);
         let servicoEditando = null;
         let clienteEditando = null;
+
+        function cloneData(data) {
+            return JSON.parse(JSON.stringify(data));
+        }
+
+        function loadFromStorage(key, fallback) {
+            if (!STORAGE_ENABLED) {
+                return cloneData(fallback);
+            }
+            try {
+                const stored = localStorage.getItem(key);
+                if (stored) {
+                    return JSON.parse(stored);
+                }
+            } catch (error) {
+                console.warn('Falha ao carregar dados salvos (mobile)', error);
+            }
+            return cloneData(fallback);
+        }
+
+        function persistState() {
+            if (!STORAGE_ENABLED) return;
+            try {
+                localStorage.setItem(STORAGE_KEYS.servicos, JSON.stringify(servicos));
+                localStorage.setItem(STORAGE_KEYS.clientes, JSON.stringify(clientes));
+                localStorage.setItem(STORAGE_KEYS.comerciais, JSON.stringify(comerciais));
+                localStorage.setItem(STORAGE_KEYS.cotacoes, JSON.stringify(cotacoes));
+            } catch (error) {
+                console.warn('Falha ao salvar dados (mobile)', error);
+            }
+        }
         
         // Login
         function fazerLogin() {
@@ -972,6 +1015,7 @@
                 servicos.push({ id: novoId, nome, tipoCusto, custo, status, dataAtualizacao: hoje });
             }
             
+            persistState();
             carregarServicos();
             limparFormAdmin();
             alert('✓ Serviço salvo com sucesso!');
@@ -1054,6 +1098,7 @@
                 dataCadastro: hoje
             });
             
+            persistState();
             carregarClientes();
             limparFormCliente();
             atualizarDashboard();
@@ -1170,6 +1215,7 @@
                 data: hoje
             });
             
+            persistState();
             carregarCotacoes();
             limparFormCotacao();
             atualizarDashboard();
@@ -1250,6 +1296,7 @@
             const cotacao = cotacoes.find(c => c.id === id);
             if (cotacao) {
                 cotacao.status = novoStatus;
+                persistState();
                 carregarCotacoes();
                 atualizarDashboard();
                 alert('✓ Cotação fechada!');

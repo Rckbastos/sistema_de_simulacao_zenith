@@ -24,6 +24,7 @@ Painel administrativo (desktop) e fluxo mobile do Sistema de Simulação Zenith 
 - Simulador/gerador de cotações completo (`calcularCotacao`, `salvarCotacao`, filtros por status, atualização em tempo real das listas de abertas/fechadas).
 - Painel de indicadores atualizado por `atualizarDashboard()` (contagem de cotações, valores movimentados, clientes ativos).
 - Versão mobile com navegação em abas, cards responsivos e as mesmas ações centrais (login, dashboards, formulários e filtros operacionais).
+- Todas as alterações ficam salvas no `localStorage`, permitindo editar serviços, clientes, comerciais e cotações e retomar o trabalho após atualizar a página.
 
 ---
 

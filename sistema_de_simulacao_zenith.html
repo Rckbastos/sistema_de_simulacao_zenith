@@ -944,8 +944,17 @@
     
     <script>
         // Dados globais
+        const STORAGE_KEYS = {
+            servicos: 'zenith-servicos',
+            clientes: 'zenith-clientes',
+            comerciais: 'zenith-comerciais',
+            cotacoes: 'zenith-cotacoes'
+        };
+        const STORAGE_ENABLED = typeof Storage !== 'undefined';
+
         let usuarioLogado = null;
-        let servicos = [
+
+        const defaultServicos = [
             { id: 1, nome: 'Conversão de Pix para Usdt', tipoCusto: 'percentual', custo: 3, status: 'ativo', dataAtualizacao: '04/12/2025' },
             { id: 2, nome: 'Conversão Usdt para Pix', tipoCusto: 'percentual', custo: 3, status: 'ativo', dataAtualizacao: '04/12/2025' },
             { id: 3, nome: 'Bancarizar Chão para Pix', tipoCusto: 'fixo', custo: 0, status: 'ativo', dataAtualizacao: '04/12/2025' },
@@ -953,13 +962,50 @@
             { id: 5, nome: 'Pix para Chão', tipoCusto: 'fixo', custo: 0, status: 'ativo', dataAtualizacao: '04/12/2025' },
             { id: 6, nome: 'Remessas Internacionais', tipoCusto: 'fixo', custo: 0, status: 'ativo', dataAtualizacao: '04/12/2025' }
         ];
-        
-        let clientes = [];
-        let comerciais = [];
-        let cotacoes = [];
+        const defaultClientes = [];
+        const defaultComerciais = [];
+        const defaultCotacoes = [];
+
+        let servicos = loadFromStorage(STORAGE_KEYS.servicos, defaultServicos);
+        let clientes = loadFromStorage(STORAGE_KEYS.clientes, defaultClientes);
+        let comerciais = loadFromStorage(STORAGE_KEYS.comerciais, defaultComerciais);
+        let cotacoes = loadFromStorage(STORAGE_KEYS.cotacoes, defaultCotacoes);
         let servicoEditando = null;
         let comercialEditando = null;
         let clienteEditando = null;
+
+        function cloneData(data) {
+            return JSON.parse(JSON.stringify(data));
+        }
+
+        function loadFromStorage(key, fallback) {
+            if (!STORAGE_ENABLED) {
+                return cloneData(fallback);
+            }
+            try {
+                const stored = localStorage.getItem(key);
+                if (stored) {
+                    return JSON.parse(stored);
+                }
+            } catch (error) {
+                console.warn('Falha ao carregar dados salvos', error);
+            }
+            return cloneData(fallback);
+        }
+
+        function persistState() {
+            if (!STORAGE_ENABLED) {
+                return;
+            }
+            try {
+                localStorage.setItem(STORAGE_KEYS.servicos, JSON.stringify(servicos));
+                localStorage.setItem(STORAGE_KEYS.clientes, JSON.stringify(clientes));
+                localStorage.setItem(STORAGE_KEYS.comerciais, JSON.stringify(comerciais));
+                localStorage.setItem(STORAGE_KEYS.cotacoes, JSON.stringify(cotacoes));
+            } catch (error) {
+                console.warn('Falha ao salvar dados', error);
+            }
+        }
         
         // Login
         function fazerLogin() {
@@ -1085,6 +1131,7 @@
                 servicos.push({ id: novoId, nome, tipoCusto, custo, status, dataAtualizacao: hoje });
             }
             
+            persistState();
             carregarServicos();
             limparFormAdmin();
             alert('✓ Serviço salvo com sucesso!');
@@ -1093,6 +1140,7 @@
         function excluirServico(id) {
             if (confirm('Tem certeza que deseja excluir este serviço?')) {
                 servicos = servicos.filter(s => s.id !== id);
+                persistState();
                 carregarServicos();
                 alert('✓ Serviço excluído com sucesso!');
             }
@@ -1192,6 +1240,7 @@
                 });
             }
             
+            persistState();
             carregarClientes();
             limparFormCliente();
             atualizarDashboard();
@@ -1215,6 +1264,7 @@
         function excluirCliente(id) {
             if (confirm('Tem certeza que deseja excluir este cliente?')) {
                 clientes = clientes.filter(c => c.id !== id);
+                persistState();
                 carregarClientes();
                 atualizarDashboard();
                 alert('✓ Cliente excluído com sucesso!');
@@ -1286,32 +1336,71 @@
             const doc = document.getElementById('comercialDoc').files[0];
             const selfie = document.getElementById('comercialSelfie').files[0];
             
-            if (!nome || !cpf || !pix || !doc || !selfie) {
+            if (!nome || !cpf || !pix) {
                 alert('Por favor, preencha todos os campos obrigatórios!');
                 return;
             }
             
             const hoje = new Date().toLocaleDateString('pt-BR');
-            const novoId = comerciais.length > 0 ? Math.max(...comerciais.map(c => c.id)) + 1 : 1;
             
-            comerciais.push({
-                id: novoId,
-                nome,
-                cpf,
-                pix,
-                status,
-                dataCadastro: hoje,
-                documentos: { doc: doc.name, selfie: selfie.name }
-            });
+            if (comercialEditando) {
+                const comercial = comerciais.find(c => c.id === comercialEditando);
+                if (comercial) {
+                    comercial.nome = nome;
+                    comercial.cpf = cpf;
+                    comercial.pix = pix;
+                    comercial.status = status;
+                    if (doc) {
+                        comercial.documentos.doc = doc.name;
+                    }
+                    if (selfie) {
+                        comercial.documentos.selfie = selfie.name;
+                    }
+                }
+                comercialEditando = null;
+            } else {
+                if (!doc || !selfie) {
+                    alert('Para cadastrar um novo comercial, anexe documento e selfie.');
+                    return;
+                }
+                const novoId = comerciais.length > 0 ? Math.max(...comerciais.map(c => c.id)) + 1 : 1;
+                comerciais.push({
+                    id: novoId,
+                    nome,
+                    cpf,
+                    pix,
+                    status,
+                    dataCadastro: hoje,
+                    documentos: { doc: doc.name, selfie: selfie.name }
+                });
+            }
             
+            persistState();
             carregarComerciais();
             limparFormComercial();
-            alert('✓ Comercial cadastrado com sucesso!');
+            alert('✓ Comercial salvo com sucesso!');
+        }
+        
+        function editarComercial(id) {
+            const comercial = comerciais.find(c => c.id === id);
+            if (comercial) {
+                comercialEditando = id;
+                document.getElementById('comercialNome').value = comercial.nome;
+                document.getElementById('comercialCPF').value = comercial.cpf;
+                document.getElementById('comercialPix').value = comercial.pix;
+                document.getElementById('comercialStatus').value = comercial.status;
+                document.getElementById('comercialDoc').value = '';
+                document.getElementById('comercialSelfie').value = '';
+                document.getElementById('previewDoc').style.display = 'none';
+                document.getElementById('previewSelfie').style.display = 'none';
+                switchTab('comerciais');
+            }
         }
         
         function excluirComercial(id) {
             if (confirm('Tem certeza que deseja excluir este comercial?')) {
                 comerciais = comerciais.filter(c => c.id !== id);
+                persistState();
                 carregarComerciais();
                 alert('✓ Comercial excluído com sucesso!');
             }
@@ -1326,6 +1415,7 @@
             document.getElementById('comercialSelfie').value = '';
             document.getElementById('previewDoc').style.display = 'none';
             document.getElementById('previewSelfie').style.display = 'none';
+            comercialEditando = null;
         }
         
         function previewImage(input, previewId) {
@@ -1422,6 +1512,7 @@
                 data: hoje
             });
             
+            persistState();
             carregarCotacoes();
             limparFormCotacao();
             atualizarDashboard();
@@ -1505,6 +1596,7 @@
             const cotacao = cotacoes.find(c => c.id === id);
             if (cotacao) {
                 cotacao.status = novoStatus;
+                persistState();
                 carregarCotacoes();
                 atualizarDashboard();
                 alert('✓ Status da cotação atualizado!');
@@ -1514,6 +1606,7 @@
         function excluirCotacao(id) {
             if (confirm('Tem certeza que deseja excluir esta cotação?')) {
                 cotacoes = cotacoes.filter(c => c.id !== id);
+                persistState();
                 carregarCotacoes();
                 atualizarDashboard();
                 alert('✓ Cotação excluída com sucesso!');
