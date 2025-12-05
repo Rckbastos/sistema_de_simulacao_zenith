@@ -24,7 +24,8 @@ Painel administrativo (desktop) e fluxo mobile do Sistema de Simulação Zenith 
 - Simulador/gerador de cotações completo (`calcularCotacao`, `salvarCotacao`, filtros por status, atualização em tempo real das listas de abertas/fechadas).
 - Painel de indicadores atualizado por `atualizarDashboard()` (contagem de cotações, valores movimentados, clientes ativos).
 - Versão mobile com navegação em abas, cards responsivos e as mesmas ações centrais (login, dashboards, formulários e filtros operacionais).
-- Admin define senha e permissões por comercial (Nova Cotação, Cotações em Aberto/Fechadas e Clientes); cada agente acessa apenas o que estiver liberado durante o login.
+- Dashboard/listas mostram dados globais para administradores e apenas as cotações do agente logado para usuários comerciais.
+- Admin define senha e permissões por comercial (todas as abas: Dashboard, Nova Cotação, Cotações, Clientes, Comerciais e Admin-Serviços) podendo conceder o perfil “Administrador” para liberar 100% do sistema.
 - Todas as alterações ficam salvas no `localStorage`, permitindo editar serviços, clientes, comerciais e cotações e retomar o trabalho após atualizar a página.
 
 ---

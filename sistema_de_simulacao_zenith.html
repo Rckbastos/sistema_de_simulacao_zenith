@@ -912,6 +912,10 @@
                         <label class="form-label">Permissões de Acesso *</label>
                         <div class="permission-list">
                             <label class="permission-item">
+                                <input type="checkbox" id="permDashboard">
+                                Dashboard
+                            </label>
+                            <label class="permission-item">
                                 <input type="checkbox" id="permNovaCotacao" checked>
                                 Nova Cotação
                             </label>
@@ -926,6 +930,18 @@
                             <label class="permission-item">
                                 <input type="checkbox" id="permClientes" checked>
                                 Clientes
+                            </label>
+                            <label class="permission-item">
+                                <input type="checkbox" id="permComerciais">
+                                Gerenciar Comerciais
+                            </label>
+                            <label class="permission-item">
+                                <input type="checkbox" id="permAdminServicos">
+                                Admin - Serviços
+                            </label>
+                            <label class="permission-item">
+                                <input type="checkbox" id="permAdminMaster">
+                                Administrador (todos os acessos)
                             </label>
                         </div>
                     </div>
@@ -1004,16 +1020,23 @@
         const STORAGE_ENABLED = typeof Storage !== 'undefined';
         const ADMIN_CREDENTIALS = { username: 'admin', password: 'admin123' };
         const PERMISSOES_LABELS = {
+            dashboard: 'Dashboard',
             novaCotacao: 'Nova Cotação',
             cotacoesAbertas: 'Cotações em Aberto',
             cotacoesFechadas: 'Cotações Fechadas',
-            clientes: 'Clientes'
+            clientes: 'Clientes',
+            comerciais: 'Gerenciar Comerciais',
+            adminServicos: 'Admin - Serviços',
+            adminMaster: 'Administrador (todos os acessos)'
         };
         const TAB_PERMISSION_MAP = {
+            'dashboard': 'dashboard',
             'nova-cotacao': 'novaCotacao',
             'cotacoes-abertas': 'cotacoesAbertas',
             'cotacoes-fechadas': 'cotacoesFechadas',
-            'clientes': 'clientes'
+            'clientes': 'clientes',
+            'comerciais': 'comerciais',
+            'admin': 'adminServicos'
         };
 
         let usuarioLogado = null;
@@ -1038,12 +1061,24 @@
         let comercialEditando = null;
         let clienteEditando = null;
 
+        function isAdminUser() {
+            return usuarioLogado?.tipo === 'admin' || usuarioLogado?.permissoes?.adminMaster;
+        }
+
+        function getComercialIdAtual() {
+            return usuarioLogado?.tipo === 'comercial' ? usuarioLogado.id : null;
+        }
+
         function getDefaultPermissoes() {
             return {
+                dashboard: true,
                 novaCotacao: true,
                 cotacoesAbertas: true,
                 cotacoesFechadas: true,
-                clientes: true
+                clientes: true,
+                comerciais: false,
+                adminServicos: false,
+                adminMaster: false
             };
         }
 
@@ -1090,19 +1125,27 @@
 
         function getPermissoesFromForm() {
             return {
+                dashboard: document.getElementById('permDashboard').checked,
                 novaCotacao: document.getElementById('permNovaCotacao').checked,
                 cotacoesAbertas: document.getElementById('permCotacoesAbertas').checked,
                 cotacoesFechadas: document.getElementById('permCotacoesFechadas').checked,
-                clientes: document.getElementById('permClientes').checked
+                clientes: document.getElementById('permClientes').checked,
+                comerciais: document.getElementById('permComerciais').checked,
+                adminServicos: document.getElementById('permAdminServicos').checked,
+                adminMaster: document.getElementById('permAdminMaster').checked
             };
         }
 
         function preencherPermissoesForm(permissoes) {
             const dados = normalizarPermissoes(permissoes);
+            document.getElementById('permDashboard').checked = dados.dashboard;
             document.getElementById('permNovaCotacao').checked = dados.novaCotacao;
             document.getElementById('permCotacoesAbertas').checked = dados.cotacoesAbertas;
             document.getElementById('permCotacoesFechadas').checked = dados.cotacoesFechadas;
             document.getElementById('permClientes').checked = dados.clientes;
+            document.getElementById('permComerciais').checked = dados.comerciais;
+            document.getElementById('permAdminServicos').checked = dados.adminServicos;
+            document.getElementById('permAdminMaster').checked = dados.adminMaster;
         }
 
         function definirPermissoesPadraoForm() {
@@ -1111,38 +1154,43 @@
 
         function podeAcessarTab(tabName) {
             if (!usuarioLogado) return false;
-            if (usuarioLogado.tipo === 'admin') return true;
+            if (isAdminUser()) return true;
             const permKey = TAB_PERMISSION_MAP[tabName];
             if (!permKey) return false;
             return Boolean(usuarioLogado.permissoes?.[permKey]);
         }
 
-        function aplicarPermissoesNasTabs() {
-            const isAdmin = usuarioLogado?.tipo === 'admin';
-            document.querySelectorAll('[data-admin-only="true"]').forEach(el => {
-                el.style.display = isAdmin ? '' : 'none';
-            });
+        function getCotacoesVisiveis() {
+            if (isAdminUser()) return cotacoes;
+            const atualId = getComercialIdAtual();
+            if (!atualId) return [];
+            return cotacoes.filter(c => c.comercialId === atualId);
+        }
 
+        function podeGerenciarCotacao(cotacao) {
+            if (!cotacao) return false;
+            return isAdminUser() || (cotacao.comercialId && cotacao.comercialId === getComercialIdAtual());
+        }
+
+        function aplicarPermissoesNasTabs() {
+            const isAdmin = isAdminUser();
             document.querySelectorAll('.tab').forEach(btn => {
                 const tabName = btn.getAttribute('data-tab');
+                if (!tabName) return;
                 if (isAdmin) {
                     btn.style.display = '';
                     return;
                 }
                 const permKey = TAB_PERMISSION_MAP[tabName];
-                if (!permKey) {
-                    btn.style.display = 'none';
-                    return;
-                }
-                btn.style.display = usuarioLogado?.permissoes?.[permKey] ? '' : 'none';
+                btn.style.display = permKey && usuarioLogado?.permissoes?.[permKey] ? '' : 'none';
             });
         }
 
         function obterPrimeiraAbaPermitida() {
-            if (usuarioLogado?.tipo === 'admin') {
+            if (isAdminUser()) {
                 return 'dashboard';
             }
-            const ordem = ['nova-cotacao', 'cotacoes-abertas', 'cotacoes-fechadas', 'clientes'];
+            const ordem = ['dashboard','nova-cotacao', 'cotacoes-abertas', 'cotacoes-fechadas', 'clientes', 'comerciais', 'admin'];
             for (const tab of ordem) {
                 if (podeAcessarTab(tab)) {
                     return tab;
@@ -1157,24 +1205,24 @@
             const pass = document.getElementById('loginPass').value;
             
             if (user === ADMIN_CREDENTIALS.username && pass === ADMIN_CREDENTIALS.password) {
-                usuarioLogado = { nome: 'Administrador', tipo: 'admin' };
-                document.getElementById('userName').textContent = 'Administrador';
-                document.getElementById('userRole').textContent = 'Admin';
+                usuarioLogado = { nome: 'Administrador', tipo: 'admin', id: 'admin' };
             } else {
                 const comercial = comerciais.find(c => (c.cpf === user || c.pix === user) && c.senha === pass);
                 if (comercial) {
                     usuarioLogado = { 
+                        id: comercial.id,
                         nome: comercial.nome, 
                         tipo: 'comercial',
                         permissoes: normalizarPermissoes(comercial.permissoes)
                     };
-                    document.getElementById('userName').textContent = comercial.nome;
-                    document.getElementById('userRole').textContent = 'Comercial';
                 } else {
                     alert('❌ Usuário ou senha incorretos!');
                     return;
                 }
             }
+            
+            document.getElementById('userName').textContent = usuarioLogado.nome;
+            document.getElementById('userRole').textContent = isAdminUser() ? 'Administrador' : 'Comercial';
             
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('appContainer').classList.add('active');
@@ -1347,14 +1395,15 @@
             });
             
             const tabela = document.getElementById('tabelaClientes');
+            const cotacoesVisiveis = getCotacoesVisiveis();
             
             if (clientes.length === 0) {
                 tabela.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-secondary);">Nenhum cliente cadastrado</td></tr>';
             } else {
                 tabela.innerHTML = '';
                 clientes.forEach(cliente => {
-                    const totalMovimentado = calcularTotalMovimentado(cliente.id);
-                    const numCotacoes = cotacoes.filter(c => c.clienteId === cliente.id).length;
+                    const totalMovimentado = calcularTotalMovimentado(cliente.id, cotacoesVisiveis);
+                    const numCotacoes = cotacoesVisiveis.filter(c => c.clienteId === cliente.id).length;
                     
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
@@ -1374,8 +1423,9 @@
             }
         }
         
-        function calcularTotalMovimentado(clienteId) {
-            return cotacoes
+        function calcularTotalMovimentado(clienteId, cotacoesLista) {
+            const base = cotacoesLista || getCotacoesVisiveis();
+            return base
                 .filter(c => c.clienteId === clienteId && c.status === 'fechada')
                 .reduce((total, c) => total + c.valorVenda, 0);
         }
@@ -1453,11 +1503,11 @@
         
         function verHistoricoCliente(id) {
             const cliente = clientes.find(c => c.id === id);
-            const cotacoesCliente = cotacoes.filter(c => c.clienteId === id);
+            const cotacoesCliente = getCotacoesVisiveis().filter(c => c.clienteId === id);
             
             let mensagem = `HISTÓRICO DO CLIENTE: ${cliente.nome}\n\n`;
             mensagem += `Total de Cotações: ${cotacoesCliente.length}\n`;
-            mensagem += `Total Movimentado: R$ ${calcularTotalMovimentado(id).toFixed(2)}\n\n`;
+            mensagem += `Total Movimentado: R$ ${calcularTotalMovimentado(id, cotacoesCliente).toFixed(2)}\n\n`;
             
             if (cotacoesCliente.length > 0) {
                 mensagem += 'COTAÇÕES:\n';
@@ -1487,7 +1537,7 @@
             const tabela = document.getElementById('tabelaComerciais');
             
             if (comerciais.length === 0) {
-                tabela.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-secondary);">Nenhum comercial cadastrado</td></tr>';
+                tabela.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-secondary);">Nenhum comercial cadastrado</td></tr>';
             } else {
                 tabela.innerHTML = '';
                 comerciais.forEach(comercial => {
@@ -1697,6 +1747,7 @@
             const comissao = valorVenda * (comissaoPercent / 100);
             const hoje = new Date().toLocaleDateString('pt-BR');
             const novoId = cotacoes.length > 0 ? Math.max(...cotacoes.map(c => c.id)) + 1 : 1;
+            const comercialId = getComercialIdAtual();
             
             cotacoes.push({
                 id: novoId,
@@ -1711,7 +1762,8 @@
                 comissao,
                 observacoes,
                 status,
-                data: hoje
+                data: hoje,
+                comercialId
             });
             
             persistState();
@@ -1742,7 +1794,7 @@
         
         function carregarCotacoesAbertas() {
             const tabela = document.getElementById('tabelaCotacoesAbertas');
-            const abertas = cotacoes.filter(c => c.status === 'analise' || c.status === 'aguardando');
+            const abertas = getCotacoesVisiveis().filter(c => c.status === 'analise' || c.status === 'aguardando');
             
             if (abertas.length === 0) {
                 tabela.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-secondary);">Nenhuma cotação em aberto</td></tr>';
@@ -1771,7 +1823,7 @@
         
         function carregarCotacoesFechadas() {
             const tabela = document.getElementById('tabelaCotacoesFechadas');
-            const fechadas = cotacoes.filter(c => c.status === 'fechada');
+            const fechadas = getCotacoesVisiveis().filter(c => c.status === 'fechada');
             
             if (fechadas.length === 0) {
                 tabela.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-secondary);">Nenhuma cotação fechada</td></tr>';
@@ -1797,6 +1849,10 @@
         function mudarStatusCotacao(id, novoStatus) {
             const cotacao = cotacoes.find(c => c.id === id);
             if (cotacao) {
+                if (!podeGerenciarCotacao(cotacao)) {
+                    alert('Você não pode alterar esta cotação.');
+                    return;
+                }
                 cotacao.status = novoStatus;
                 persistState();
                 carregarCotacoes();
@@ -1807,6 +1863,11 @@
         
         function excluirCotacao(id) {
             if (confirm('Tem certeza que deseja excluir esta cotação?')) {
+                const cotacao = cotacoes.find(c => c.id === id);
+                if (cotacao && !podeGerenciarCotacao(cotacao)) {
+                    alert('Você não pode excluir esta cotação.');
+                    return;
+                }
                 cotacoes = cotacoes.filter(c => c.id !== id);
                 persistState();
                 carregarCotacoes();
@@ -1819,7 +1880,7 @@
             const busca = document.getElementById('filtroAbertoBusca').value.toLowerCase();
             const status = document.getElementById('filtroAbertoStatus').value;
             
-            let abertas = cotacoes.filter(c => c.status === 'analise' || c.status === 'aguardando');
+            let abertas = getCotacoesVisiveis().filter(c => c.status === 'analise' || c.status === 'aguardando');
             
             if (busca) {
                 abertas = abertas.filter(c => c.clienteNome.toLowerCase().includes(busca));
@@ -1859,7 +1920,7 @@
         function filtrarCotacoesFechadas() {
             const busca = document.getElementById('filtroFechadoBusca').value.toLowerCase();
             
-            let fechadas = cotacoes.filter(c => c.status === 'fechada');
+            let fechadas = getCotacoesVisiveis().filter(c => c.status === 'fechada');
             
             if (busca) {
                 fechadas = fechadas.filter(c => c.clienteNome.toLowerCase().includes(busca));
@@ -1890,16 +1951,19 @@
         
         // Dashboard
         function atualizarDashboard() {
-            const abertas = cotacoes.filter(c => c.status === 'analise' || c.status === 'aguardando').length;
-            const fechadas = cotacoes.filter(c => c.status === 'fechada').length;
-            const valorTotal = cotacoes
+            const base = getCotacoesVisiveis();
+            const abertas = base.filter(c => c.status === 'analise' || c.status === 'aguardando').length;
+            const fechadas = base.filter(c => c.status === 'fechada').length;
+            const valorTotal = base
                 .filter(c => c.status === 'fechada')
                 .reduce((total, c) => total + c.valorVenda, 0);
+            const clientesSet = new Set(base.map(c => c.clienteId));
+            const totalClientesIndicador = isAdminUser() ? clientes.length : clientesSet.size;
             
             document.getElementById('totalAberto').textContent = abertas;
             document.getElementById('totalFechado').textContent = fechadas;
             document.getElementById('valorTotal').textContent = 'R$ ' + valorTotal.toFixed(2);
-            document.getElementById('totalClientes').textContent = clientes.length;
+            document.getElementById('totalClientes').textContent = totalClientesIndicador;
         }
         
         // Formatação de CPF
