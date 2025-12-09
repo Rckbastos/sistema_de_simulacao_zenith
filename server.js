@@ -4,9 +4,19 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const { Pool } = require('pg');
+const { PrismaPg } = require('@prisma/adapter-pg');
 const { PrismaClient } = require('@prisma/client');
 
-const prisma = new PrismaClient();
+const DATABASE_URL = process.env.DATABASE_URL;
+
+if (!DATABASE_URL) {
+  throw new Error('DATABASE_URL is not configured');
+}
+
+const pool = new Pool({ connectionString: DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
@@ -361,6 +371,16 @@ app.get('/mobile', (req, res) => {
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ message: 'Erro interno no servidor' });
+});
+
+const shutdown = signal => {
+  console.log(`Encerrando servidor (${signal})...`);
+  Promise.allSettled([prisma.$disconnect(), pool.end()])
+    .finally(() => process.exit(0));
+};
+
+['SIGINT', 'SIGTERM'].forEach(signal => {
+  process.on(signal, () => shutdown(signal));
 });
 
 app.listen(PORT, () => {
