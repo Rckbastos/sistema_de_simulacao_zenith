@@ -12,10 +12,13 @@ Guia oficial de publicação das versões desktop e mobile do Sistema de Simula�
 | --- | --- |
 | `sistema_de_simulacao_zenith.html` | Versão desktop / painel completo.
 | `sistema_de_simulacao_zenith_mobile.html` | Versão mobile independente (tabs, navegação inferior).
-| `zenith-logo.png` | Logo oficial em alta resolução.
-| `server.js` | Servidor HTTP simples em Node.js.
-| `package.json` | Scripts (`npm start`) e metadados usados pelo Railway.
+| `app.js` | Lógica front-end compartilhada (login, requisições, permissões).
+| `server.js` | API Express (JWT + CRUDs) e servidor estático.
+| `prisma/` | Schema, migrations e seed (`prisma/seed.js`).
+| `package.json` | Scripts (`npm start`, `npm run db:migrate`, `npm run db:seed`).
+| `.env.example` | Modelo de variáveis (`DATABASE_URL`, `JWT_SECRET`, `ADMIN_USER`, `ADMIN_PASS`).
 | `README.md` | Resumo rápido de uso.
+| `zenith-logo.png` | Logo oficial em alta resolução.
 
 ---
 
@@ -23,62 +26,68 @@ Guia oficial de publicação das versões desktop e mobile do Sistema de Simula�
 
 1. **Pré-requisitos**
    - Node.js 18+ instalado localmente.
-   - [Railway CLI](https://docs.railway.app/develop/cli) e conta ativa.
+   - [Railway CLI](https://docs.railway.app/develop/cli) configurado.
 
-2. **Primeira configuração**
+2. **Inicializar o serviço**
    ```bash
    railway login
-   railway init        # "Deploy from Source"
-   # selecione o diretório atual como raiz do projeto
+   railway init            # "Deploy from Source"
    ```
 
-3. **Deploy**
+3. **Adicionar banco PostgreSQL**
+   - No painel do Railway (ou via `railway add`), crie um recurso **PostgreSQL**.
+   - Copie a `DATABASE_URL` fornecida.
+
+4. **Variáveis obrigatórias no serviço web**
+   - `DATABASE_URL` – string completa do banco criado.
+   - `JWT_SECRET` – chave forte para assinar tokens.
+   - `ADMIN_USER` e `ADMIN_PASS` – credenciais do administrador master.
+   - (Opcional) `PORT` caso deseje porta fixa diferente de 3000.
+
+5. **Primeiro deploy + migrations**
    ```bash
-   railway up          # envia o código e dispara build
+   railway up                      # envia o código e executa o build (npm install + npm start)
+   railway run npm run db:migrate  # aplica migrations no PostgreSQL do Railway
+   railway run npm run db:seed     # popula com serviços/clientes/cotações demo (opcional)
    ```
 
-4. **Comportamento da aplicação**
-   - Railway detecta o `package.json`, executa `npm install` e roda `npm start` (que chama `node server.js`).
-   - Porta é fornecida pela variável `PORT` (já suportado pelo `server.js`).
-   - Rotas disponíveis:
-     - `/` → versão desktop (`sistema_de_simulacao_zenith.html`)
-     - `/mobile` → versão mobile (`sistema_de_simulacao_zenith_mobile.html`)
-     - `/zenith-logo.png` → logo compartilhada
+6. **Comportamento da aplicação**
+   - `/` → painel desktop
+   - `/mobile` → versão mobile
+   - Endpoints REST (`/auth`, `/servicos`, `/clientes`, `/cotacoes`, `/comerciais`) servem a UI.
+   - Railway provê HTTPS automático; vincule um domínio customizado se necessário.
 
-5. **Pós-deploy**
-   - Configure o domínio customizado no painel do Railway (opcional).
-   - Ative HTTPS gratuito diretamente na plataforma.
-   - Rode `railway status` para acompanhar builds futuros.
+7. **Operação contínua**
+   - Use `railway run npm run db:migrate` sempre que o schema Prisma mudar.
+   - `railway status` / painel para acompanhar logs e reiniciar serviços.
+   - `railway up` dispara novos builds a partir da branch principal.
 
 ---
 
-## 🌐 Deploy alternativo (Apache/Nginx ou cPanel)
+## 🌐 Deploy alternativo (VPS, Docker ou cPanel com Node)
 
-1. Faça upload dos três arquivos estáticos (`*.html` + `zenith-logo.png`).
-2. Opcional: renomeie `sistema_de_simulacao_zenith.html` → `index.html` e `sistema_de_simulacao_zenith_mobile.html` → `mobile.html`.
-3. Estrutura sugerida:
+1. **Servidor** – garanta Node.js 18+, acesso ao PostgreSQL (pode ser RDS/Azure/etc.) e HTTPS via Nginx/Apache.
+2. **Código** – clone o repositório, copie `.env.example` para `.env` e informe as variáveis do banco/segurança.
+3. **Dependências** – rode `npm install`, `npm run db:generate`, depois `npm run db:migrate` e `npm run db:seed` (opcional).
+4. **Processo** – utilize um gerenciador como `pm2` ou `systemd` para manter `npm start` ativo. Exemplos:
+   ```bash
+   pm2 start "npm start" --name zenith
+   pm2 save
    ```
-   /var/www/html/zenith/
-   ├── index.html
-   ├── mobile.html
-   └── zenith-logo.png
-   ```
-4. Permissões: `chmod 644 *.html *.png`.
-5. URLs padrão: `https://seudominio.com/zenith/` (desktop) e `https://seudominio.com/zenith/mobile.html`.
-
-> Preferindo cPanel, o fluxo é idêntico via Gerenciador de Arquivos (`public_html/zenith`).
+5. **Proxy/SSL** – exponha `PORT` via Nginx/Apache apontando para `http://127.0.0.1:PORT`, ativando HTTPS conforme política do servidor.
+6. **Atualizações** – ao publicar nova versão, execute novamente `npm run db:migrate` (se houver alterações de schema) e reinicie o processo Node.
 
 ---
 
 ## 🔐 Credenciais e segurança
 
-- Login padrão (alterar antes do go-live): `admin / admin123`.
-- Procure pelo trecho `password: 'admin123'` nos HTMLs para personalizar rapidamente.
-- Use obrigatoriamente HTTPS (Let's Encrypt / Railway já provê SSL automático).
+- Defina o par `ADMIN_USER` / `ADMIN_PASS` diretamente nas variáveis de ambiente (não há mais credencial fixa no código).
+- Comerciais utilizam CPF/chave PIX + senha configurada pelo administrador (hash armazenado no banco).
+- Use obrigatoriamente HTTPS (Railway já entrega SSL; domínios próprios precisam de DNS apontado).
 - Recomendações adicionais:
-  1. Implementar autenticação real (backend, hash de senhas, proteção contra brute force).
-  2. Habilitar firewall e monitorar tentativas de login.
-  3. Configurar backups automáticos dos arquivos e, quando houver, do banco de dados.
+  1. Limite tentativas de login (rate limiting) caso exponha publicamente.
+  2. Monitore acessos e erros via logs do Railway.
+  3. Configure backups automáticos/snapshots do PostgreSQL.
 
 ---
 
@@ -118,10 +127,10 @@ if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(naviga
 
 ## 📈 Próximas melhorias sugeridas
 
-- API Node/Express com banco (PostgreSQL) para controle real de usuários.
-- Exportação de relatórios (PDF/Excel) e envio automático.
-- Notificações WhatsApp / push.
-- App mobile nativo (React Native) com autenticação biométrica.
+- Orquestrar workers para envio automático de relatórios (PDF/Excel) e notificações.
+- Guardar anexos (documento/selfie) em storage dedicado (S3/Cloudflare R2) em vez de base64 no banco.
+- Implementar MFA/bloqueio de tentativas no login administrador.
+- Evoluir para aplicativo mobile nativo (React Native) reutilizando a API atual.
 
 ---
 

@@ -1,0 +1,68 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Comercial {
+  id          String    @id @default(uuid())
+  nome        String
+  cpf         String    @unique
+  pix         String    @unique
+  status      String    @default("ativo")
+  senhaHash   String
+  permissoes  Json
+  documentoUrl String?
+  selfieUrl    String?
+  createdAt   DateTime  @default(now())
+  cotacoes    Cotacao[]
+}
+
+model Cliente {
+  id          String    @id @default(uuid())
+  nome        String
+  documento   String
+  email       String?
+  telefone    String
+  endereco    String?
+  observacoes String?
+  createdAt   DateTime  @default(now())
+  cotacoes    Cotacao[]
+}
+
+model Servico {
+  id          String    @id @default(uuid())
+  nome        String
+  tipoCusto   String
+  valor       Float
+  status      String    @default("ativo")
+  updatedAt   DateTime  @updatedAt @default(now())
+  cotacoes    Cotacao[]
+}
+
+model Cotacao {
+  id              String     @id @default(uuid())
+  cliente         Cliente    @relation(fields: [clienteId], references: [id])
+  clienteId       String
+  servico         Servico    @relation(fields: [servicoId], references: [id])
+  servicoId       String
+  comercial       Comercial? @relation(fields: [comercialId], references: [id])
+  comercialId     String?
+  valorVenda      Float
+  custo           Float
+  margem          Float
+  comissaoPercent Float
+  comissao        Float
+  observacoes     String?
+  status          String
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt @default(now())
+}
