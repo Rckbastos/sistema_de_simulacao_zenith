@@ -4,6 +4,7 @@
   "description": "Versões desktop e mobile do Sistema de Simulação Zenith prontas para deploy no Railway.",
   "main": "server.js",
   "scripts": {
+    "prestart": "prisma generate",
     "start": "node server.js",
     "dev": "node server.js",
     "db:generate": "prisma generate",
