@@ -5,6 +5,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const fetchFn = global.fetch || require('node-fetch');
+const PDFDocument = require('pdfkit');
 const { Pool } = require('pg');
 const { PrismaPg } = require('@prisma/adapter-pg');
 const { PrismaClient, Prisma } = require('@prisma/client');
@@ -67,6 +68,21 @@ const DEFAULT_PERMISSIONS = {
   comerciais: false,
   adminServicos: false,
   adminMaster: false
+};
+
+const INVOICE_DEFAULTS = {
+  companyName: process.env.INVOICE_COMPANY_NAME || 'ZENITH PAY',
+  addressLine1: process.env.INVOICE_COMPANY_ADDRESS1 || '[Company Address Line 1]',
+  addressLine2: process.env.INVOICE_COMPANY_ADDRESS2 || '[City, State, Postal Code, Country]',
+  phone: process.env.INVOICE_COMPANY_PHONE || 'Tel: [Phone Number]',
+  fax: process.env.INVOICE_COMPANY_FAX || 'Fax: [Fax Number]',
+  email: process.env.INVOICE_COMPANY_EMAIL || 'Email: [Email Address]',
+  website: process.env.INVOICE_COMPANY_WEBSITE || 'Web: www.zenithpay.com',
+  taxId: process.env.INVOICE_COMPANY_TAX || 'Tax ID: [Tax ID Number]',
+  romalpaClause:
+    process.env.INVOICE_ROMALPA_CLAUSE
+    || 'Goods sold and delivered remain the property of Zenith Pay until full payment is received.',
+  terms: (process.env.INVOICE_TERMS || 'Goods sold are not returnable unless defective.|Payment must be received before shipment for prepayment terms.|Any disputes shall be governed by the laws of [Jurisdiction].|Buyer is responsible for all import duties, taxes, and customs clearance fees.').split('|')
 };
 
 app.use(cors());
@@ -182,6 +198,242 @@ const mapCotacao = cotacao => ({
   }))
 });
 
+const sanitizeText = (value, fallback = '') => {
+  if (value === undefined || value === null) return fallback;
+  return value.toString().trim();
+};
+
+const parseAmount = value => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const ensureArray = value => (Array.isArray(value) ? value : []);
+
+const buildInvoicePayload = payload => {
+  const invoiceDate = sanitizeText(payload.invoiceDate, new Date().toISOString().slice(0, 10));
+  const invoiceNumber = sanitizeText(payload.invoiceNumber, `INV-${invoiceDate.replace(/-/g, '')}`);
+  const customer = {
+    name: sanitizeText(payload.customerName),
+    addressLine1: sanitizeText(payload.customerAddressLine1),
+    addressLine2: sanitizeText(payload.customerAddressLine2),
+    cityState: sanitizeText(payload.customerCityState),
+    country: sanitizeText(payload.customerCountry),
+    taxId: sanitizeText(payload.customerTaxId),
+    email: sanitizeText(payload.customerEmail),
+    phone: sanitizeText(payload.customerPhone)
+  };
+
+  const items = ensureArray(payload.items).map((item, index) => {
+    const qty = parseAmount(item.quantity);
+    const unitPrice = parseAmount(item.unitPrice);
+    const total = qty * unitPrice;
+    return {
+      serial: index + 1,
+      partNumber: sanitizeText(item.partNumber),
+      description: sanitizeText(item.description),
+      quantity: qty,
+      unit: sanitizeText(item.unit || 'PCS'),
+      unitPrice,
+      total
+    };
+  });
+
+  const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+  const discount = parseAmount(payload.discount);
+  const shipping = parseAmount(payload.shipping);
+  const total = subtotal - discount + shipping;
+  const toCurrency = value => `USD $ ${value.toFixed(2)}`;
+
+  return {
+    company: {
+      ...INVOICE_DEFAULTS,
+      name: INVOICE_DEFAULTS.companyName,
+      addressLine1: INVOICE_DEFAULTS.addressLine1,
+      addressLine2: INVOICE_DEFAULTS.addressLine2,
+      phone: INVOICE_DEFAULTS.phone,
+      fax: INVOICE_DEFAULTS.fax,
+      email: INVOICE_DEFAULTS.email,
+      website: INVOICE_DEFAULTS.website,
+      taxId: INVOICE_DEFAULTS.taxId
+    },
+    customer,
+    invoice: {
+      number: invoiceNumber,
+      date: invoiceDate,
+      customerNumber: sanitizeText(payload.customerNumber),
+      paymentTerms: sanitizeText(payload.paymentTerms, 'Prepayment'),
+      deliveryTerms: sanitizeText(payload.deliveryTerms, 'FOB')
+    },
+    logistic: {
+      countryOfOrigin: sanitizeText(payload.countryOfOrigin),
+      hsCode: sanitizeText(payload.hsCode),
+      deliveryInfo: sanitizeText(payload.deliveryInfo),
+      shippingMethod: sanitizeText(payload.shippingMethod)
+    },
+    payment: {
+      bankName: sanitizeText(payload.bankName),
+      swiftCode: sanitizeText(payload.swiftCode),
+      bankBranch: sanitizeText(payload.bankBranch),
+      beneficiaryAccount: sanitizeText(payload.beneficiaryAccount),
+      iban: sanitizeText(payload.iban),
+      beneficiaryName: sanitizeText(payload.beneficiaryName, INVOICE_DEFAULTS.companyName),
+      beneficiaryAddress: sanitizeText(payload.beneficiaryAddress),
+      intermediaryBank: sanitizeText(payload.intermediaryBank),
+      intermediarySwift: sanitizeText(payload.intermediarySwift)
+    },
+    acknowledgement: sanitizeText(payload.acknowledgementText, 'Received above goods in good order & condition. Goods sold are not returnable.'),
+    signatureName: sanitizeText(payload.signatureName, 'Zenith Pay'),
+    notes: ensureArray(payload.extraNotes).map(line => sanitizeText(line)).filter(Boolean),
+    items,
+    totals: {
+      subtotal,
+      discount,
+      shipping,
+      total,
+      formatted: {
+        subtotal: toCurrency(subtotal),
+        discount: toCurrency(discount),
+        shipping: toCurrency(shipping),
+        total: toCurrency(total)
+      }
+    }
+  };
+};
+
+const renderInvoicePdf = (res, invoice) => {
+  const doc = new PDFDocument({ size: 'A4', margin: 50 });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="invoice-${invoice.invoice.number}.pdf"`);
+  doc.pipe(res);
+
+  const textLine = (text, options = {}) => {
+    doc.text(text, options);
+    doc.moveDown(options.moveDown || 0.15);
+  };
+
+  doc.fontSize(22).text(invoice.company.name, { align: 'center' });
+  doc.moveDown(0.2);
+  doc.fontSize(10).text(invoice.company.addressLine1, { align: 'center' });
+  textLine(invoice.company.addressLine2, { align: 'center' });
+  textLine(`${invoice.company.phone} | ${invoice.company.fax} | ${invoice.company.email}`, { align: 'center' });
+  textLine(`${invoice.company.website} | ${invoice.company.taxId}`, { align: 'center' });
+
+  doc.moveDown(0.5);
+  doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+
+  doc.moveDown(0.5);
+  doc.fontSize(11).text('MESSRS.', { underline: true });
+  doc.fontSize(10);
+  textLine(invoice.customer.name);
+  textLine(invoice.customer.addressLine1);
+  textLine(invoice.customer.addressLine2);
+  textLine(invoice.customer.cityState);
+  textLine(invoice.customer.country);
+  textLine(`Tax ID / CNPJ: ${invoice.customer.taxId}`);
+  textLine(`Email: ${invoice.customer.email}`);
+  textLine(`Phone: ${invoice.customer.phone}`);
+
+  doc.moveDown(0.5);
+  const infoTop = doc.y;
+  doc.rect(50, infoTop, 495, 60).stroke();
+  const infoFields = [
+    ['Invoice No.', invoice.invoice.number],
+    ['Date', invoice.invoice.date],
+    ['Customer No.', invoice.invoice.customerNumber || ''],
+    ['Payment Terms', invoice.invoice.paymentTerms],
+    ['Delivery Terms', invoice.invoice.deliveryTerms]
+  ];
+  doc.fontSize(10);
+  infoFields.forEach((field, index) => {
+    const labelX = 60;
+    const valueX = 200;
+    const offsetY = infoTop + 5 + index * 11;
+    doc.text(`${field[0]}:`, labelX, offsetY);
+    doc.text(field[1], valueX, offsetY);
+  });
+  doc.moveDown(5);
+  doc.moveDown(1);
+
+  const tableTop = doc.y + 10;
+  const columnX = [50, 90, 170, 320, 400, 470];
+  const rowHeight = 25;
+  const headerLabels = ['S.NO', 'Part No.', 'Description', 'Quantity', 'Unit Price (USD)', 'Total Amount (USD)'];
+  doc.rect(50, tableTop - 15, 495, rowHeight).fillAndStroke('#f0f0f0', '#000');
+  doc.fillColor('#000');
+  headerLabels.forEach((label, i) => {
+    doc.text(label, columnX[i] + 2, tableTop - 12, { width: (i === columnX.length - 1 ? 80 : columnX[i + 1] - columnX[i] - 4), align: 'left' });
+  });
+
+  let currentY = tableTop + rowHeight - 15;
+  invoice.items.forEach(item => {
+    doc.rect(50, currentY - 5, 495, rowHeight).stroke();
+    doc.text(String(item.serial), columnX[0] + 2, currentY, { width: columnX[1] - columnX[0] - 4 });
+    doc.text(item.partNumber, columnX[1] + 2, currentY, { width: columnX[2] - columnX[1] - 4 });
+    doc.text(item.description, columnX[2] + 2, currentY, { width: columnX[3] - columnX[2] - 4 });
+    doc.text(`${item.quantity} ${item.unit}`, columnX[3] + 2, currentY);
+    doc.text(item.unitPrice.toFixed(2), columnX[4] + 2, currentY);
+    doc.text(item.total.toFixed(2), columnX[5] + 2, currentY);
+    currentY += rowHeight;
+  });
+
+  doc.moveDown(1.5);
+  doc.fontSize(10);
+  textLine(`Subtotal: ${invoice.totals.formatted.subtotal}`, { align: 'right' });
+  textLine(`Discount: ${invoice.totals.formatted.discount}`, { align: 'right' });
+  textLine(`Shipping/Freight: ${invoice.totals.formatted.shipping}`, { align: 'right' });
+  doc.fontSize(12).text(`TOTAL: ${invoice.totals.formatted.total}`, { align: 'right', underline: true });
+
+  doc.moveDown(0.5);
+  doc.fontSize(10).text('(SAY US DOLLARS ' + (invoice.amountInWords || '') + ')', { align: 'right', italics: true });
+
+  doc.moveDown(1);
+  doc.fontSize(11).text('COUNTRY OF ORIGIN:', { continued: true }).fontSize(10).text(` ${invoice.logistic.countryOfOrigin}`);
+  doc.fontSize(11).text('HS CODE:', { continued: true }).fontSize(10).text(` ${invoice.logistic.hsCode}`);
+  doc.fontSize(11).text('DELIVERY INFORMATION:');
+  doc.fontSize(10).text(invoice.logistic.deliveryInfo || '');
+  doc.fontSize(10).text(`Shipping Method: ${invoice.logistic.shippingMethod}`);
+
+  doc.moveDown(0.5);
+  doc.rect(50, doc.y, 495, 110).stroke();
+  const paymentTop = doc.y + 5;
+  doc.fontSize(11).text('PAYMENT INSTRUCTIONS:', 60, paymentTop);
+  const paymentFields = [
+    ['Bank Name', invoice.payment.bankName],
+    ['Swift Code', invoice.payment.swiftCode],
+    ['Bank Branch', invoice.payment.bankBranch],
+    ['Beneficiary A/C', invoice.payment.beneficiaryAccount],
+    ['IBAN', invoice.payment.iban],
+    ['Beneficiary Name', invoice.payment.beneficiaryName],
+    ['Beneficiary Address', invoice.payment.beneficiaryAddress],
+    ['Intermediary Bank', invoice.payment.intermediaryBank],
+    ['Intermediary Swift Code', invoice.payment.intermediarySwift]
+  ];
+  let paymentY = paymentTop + 12;
+  paymentFields.forEach(field => {
+    if (!field[1]) return;
+    doc.fontSize(10).text(`${field[0]}: ${field[1]}`, 60, paymentY);
+    paymentY += 12;
+  });
+
+  doc.moveDown(5);
+  doc.fontSize(10).text(`Romalpa Clause: ${INVOICE_DEFAULTS.romalpaClause}`);
+  doc.moveDown(0.5);
+  doc.fontSize(11).text('Terms & Conditions:');
+  INVOICE_DEFAULTS.terms.forEach(term => {
+    doc.fontSize(10).text(`• ${term}`);
+  });
+
+  doc.moveDown(1);
+  doc.fontSize(10).text(invoice.acknowledgement, { align: 'center' });
+  doc.moveDown(2);
+  doc.fontSize(10).text('For & On Behalf Of', { align: 'center' });
+  doc.fontSize(12).text(invoice.signatureName, { align: 'center' });
+  doc.fontSize(9).text('This is a computer generated invoice. No signature required.', { align: 'center', opacity: 0.7 });
+
+  doc.end();
+};
+
 const divide = (numerator, denominator) => {
   if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) {
     return null;
@@ -274,6 +526,38 @@ app.get('/cotacoes/ticker', asyncHandler(async (req, res) => {
     console.error('Erro ao buscar cotações', error);
     res.status(502).json({ message: 'Não foi possível obter cotações no momento.' });
   }
+}));
+
+app.post('/invoices/generate', authenticate, adminOnly, asyncHandler(async (req, res) => {
+  const body = req.body || {};
+  const items = Array.isArray(body.items) ? body.items : [];
+
+  if (items.length === 0) {
+    return res.status(400).json({ message: 'Inclua ao menos um item na invoice.' });
+  }
+
+  let clienteData = {};
+  if (body.clienteId) {
+    const cliente = await prisma.cliente.findUnique({ where: { id: body.clienteId } });
+    if (!cliente) {
+      return res.status(404).json({ message: 'Cliente não encontrado.' });
+    }
+    clienteData = {
+      customerName: cliente.nome,
+      customerAddressLine1: cliente.endereco || '',
+      customerPhone: cliente.telefone || '',
+      customerEmail: cliente.email || '',
+      customerTaxId: cliente.documento || ''
+    };
+  }
+
+  const payload = buildInvoicePayload({
+    ...clienteData,
+    ...body,
+    items
+  });
+
+  return renderInvoicePdf(res, payload);
 }));
 
 app.post('/auth/login', asyncHandler(async (req, res) => {
