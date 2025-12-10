@@ -40,6 +40,11 @@
     style: 'currency',
     currency: 'BRL'
   });
+  const currencyFormatterUSD = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD'
+  });
+  const MAX_COTACAO_ITENS = 3;
 
   const safeParse = (value, fallback = null) => {
     try {
@@ -60,7 +65,10 @@
     servicoEditando: null,
     clienteEditando: null,
     comercialEditando: null,
-    kycRegistros: []
+    kycRegistros: [],
+    cotacaoItens: [],
+    cotacaoMoeda: 'BRL',
+    cotacaoUsdtBrl: null
   };
 
   const el = id => document.getElementById(id);
@@ -73,6 +81,85 @@
     if (node) node.textContent = value;
   };
   const formatCurrency = value => currencyFormatter.format(Number(value) || 0);
+  const formatCurrencyByMoeda = (value, moeda = 'BRL') => {
+    const numero = Number(value) || 0;
+    return moeda === 'USD'
+      ? currencyFormatterUSD.format(numero)
+      : currencyFormatter.format(numero);
+  };
+  const normalizarMoedaLocal = (moeda = 'BRL') => {
+    const normalized = (moeda || 'BRL').toString().trim().toUpperCase();
+    return normalized || 'BRL';
+  };
+  const adicionarValorPorMoeda = (mapa, moeda, valor) => {
+    const numero = Number(valor);
+    if (!Number.isFinite(numero)) return;
+    const chave = normalizarMoedaLocal(moeda);
+    mapa[chave] = (mapa[chave] || 0) + numero;
+  };
+  const mesclarMapaMoedas = (destino, origem = {}) => {
+    Object.entries(origem || {}).forEach(([moeda, valor]) => {
+      adicionarValorPorMoeda(destino, moeda, valor);
+    });
+  };
+  const formatMapaMoedas = mapa => {
+    const partes = Object.entries(mapa)
+      .filter(([, valor]) => Math.abs(valor) > 0.0001);
+    if (!partes.length) return formatCurrency(0);
+    return partes
+      .map(([moeda, valor]) => formatCurrencyByMoeda(valor, moeda))
+      .join(' + ');
+  };
+  const calcularMapaCotacaoPorCampo = (cotacao, campo = 'valorVenda') => {
+    const mapa = {};
+    const itens = extrairItensCotacao(cotacao);
+    itens.forEach(item => {
+      const valor = Number(item[campo]) || 0;
+      if (!valor) return;
+      adicionarValorPorMoeda(mapa, item.moeda || cotacao?.moeda || 'BRL', valor);
+    });
+    return mapa;
+  };
+  const formatarTotalCotacaoPorCampo = (cotacao, campo = 'valorVenda') => {
+    const mapa = calcularMapaCotacaoPorCampo(cotacao, campo);
+    return formatMapaMoedas(mapa);
+  };
+  const extrairItensCotacao = cotacao => {
+    if (Array.isArray(cotacao?.itens) && cotacao.itens.length > 0) {
+      return cotacao.itens.map(item => ({
+        ...item,
+        servicoNome: item.servicoNome || item.servico?.nome || 'Serviço',
+        moeda: normalizarMoedaLocal(item.moeda || cotacao.moeda || 'BRL'),
+        valorVenda: Number(item.valorVenda) || 0,
+        comissao: Number(item.comissao) || 0
+      }));
+    }
+    if (!cotacao) return [];
+    if (!cotacao.servicoNome && !cotacao.valorVenda) return [];
+    return [{
+      servicoNome: cotacao.servicoNome || 'Serviço',
+      valorVenda: Number(cotacao.valorVenda) || 0,
+      comissao: Number(cotacao.comissao) || 0,
+      moeda: normalizarMoedaLocal(cotacao.moeda || 'BRL')
+    }];
+  };
+  const formatarServicosCotacaoHtml = cotacao => {
+    const itens = extrairItensCotacao(cotacao);
+    if (!itens.length) return '-';
+    return itens.map(item => `
+      <div class="cotacao-servico">
+        <span>${escapeHtml(item.servicoNome)}</span>
+        <strong>${formatCurrencyByMoeda(item.valorVenda, item.moeda)}</strong>
+      </div>
+    `).join('');
+  };
+  const formatarServicosCotacaoTexto = cotacao => {
+    const itens = extrairItensCotacao(cotacao);
+    if (!itens.length) return '-';
+    return itens
+      .map(item => `${item.servicoNome} (${formatCurrencyByMoeda(item.valorVenda, item.moeda)})`)
+      .join(', ');
+  };
   const formatDate = value => {
     if (!value) return '-';
     try {
@@ -100,6 +187,21 @@
   });
   const TICKER_REFRESH_MS = 60000;
   let tickerTimer = null;
+  let cotacaoItemSeq = 0;
+  const gerarItemId = () => `item-${Date.now()}-${cotacaoItemSeq++}`;
+  const novoItemCotacao = (overrides = {}) => ({
+    uid: gerarItemId(),
+    servicoId: '',
+    valorVenda: '',
+    ...overrides
+  });
+  const resetarCotacaoItens = () => {
+    state.cotacaoItens = [novoItemCotacao()];
+  };
+  if (state.cotacaoItens.length === 0) {
+    resetarCotacaoItens();
+  }
+  const temCotacaoMultiUI = () => Boolean(el('cotacaoItensContainer'));
 
   const formatTickerValue = value => {
     const num = Number(value);
@@ -140,10 +242,10 @@
       const data = await response.json();
       state.ticker = data;
       renderTicker(data);
-      const servicoId = el('cotacaoServico')?.value;
-      if (servicoId) {
-        const servico = state.servicos.find(s => s.id === servicoId);
-        atualizarResumoCambio(servico);
+      if (temCotacaoMultiUI() || el('cotacaoServico')) {
+        calcularCotacao();
+      } else {
+        atualizarResumoCambio(false);
       }
     } catch (error) {
       console.warn('Ticker indisponível', error);
@@ -373,6 +475,7 @@
 
   const renderServicos = () => {
     atualizarSelectServicos();
+    renderCotacaoItens();
     const tabela = el('tabelaServicos');
     if (!tabela) return;
     tabela.innerHTML = '';
@@ -401,6 +504,109 @@
     });
   };
 
+  const getServicosAtivos = () => state.servicos.filter(s => s.status === 'ativo');
+
+  const renderCotacaoItens = () => {
+    const container = el('cotacaoItensContainer');
+    if (!container) return;
+
+    if (state.cotacaoItens.length === 0) {
+      container.innerHTML = '<div class="resumo-item resumo-item-empty" data-empty-itens>Utilize o botão abaixo para adicionar até 3 serviços.</div>';
+      return;
+    }
+
+    const servicosAtivos = getServicosAtivos();
+    container.innerHTML = state.cotacaoItens.map((item, index) => {
+      const options = ['<option value="">Selecione</option>']
+        .concat(servicosAtivos.map(servico => {
+          const custoDisplay = servico.tipoCusto === 'percentual'
+            ? `${servico.valor}%`
+            : formatCurrency(servico.valor);
+          const selected = servico.id === item.servicoId ? 'selected' : '';
+          return `<option value="${servico.id}" ${selected}>${escapeHtml(servico.nome)} - Custo: ${custoDisplay}</option>`;
+        }))
+        .join('');
+      const disabledRemove = state.cotacaoItens.length === 1 ? 'disabled' : '';
+      return `
+        <div class="cotacao-item-card">
+          <div class="cotacao-item-card__header">
+            <span>Serviço ${index + 1}</span>
+            <button type="button" class="cotacao-item-remove" ${disabledRemove} onclick="removerItemCotacao('${item.uid}')">🗑️</button>
+          </div>
+          <div class="cotacao-item-card__body">
+            <label class="form-label">Serviço</label>
+            <select class="form-select" onchange="atualizarItemCotacaoCampo('${item.uid}', 'servicoId', this.value)">
+              ${options}
+            </select>
+            <label class="form-label">Valor de Venda</label>
+            <input type="number" class="form-input" min="0" step="0.01" value="${item.valorVenda}" oninput="atualizarItemCotacaoCampo('${item.uid}', 'valorVenda', this.value)">
+          </div>
+        </div>
+      `;
+    }).join('');
+  };
+
+  const adicionarItemCotacao = () => {
+    if (!temCotacaoMultiUI()) return;
+    if (state.cotacaoItens.length >= MAX_COTACAO_ITENS) {
+      alert('É possível adicionar no máximo 3 serviços na mesma cotação.');
+      return;
+    }
+    state.cotacaoItens.push(novoItemCotacao());
+    renderCotacaoItens();
+    calcularCotacao();
+  };
+
+  const removerItemCotacao = uid => {
+    if (!temCotacaoMultiUI()) return;
+    state.cotacaoItens = state.cotacaoItens.filter(item => item.uid !== uid);
+    renderCotacaoItens();
+    calcularCotacao();
+  };
+
+  const atualizarItemCotacaoCampo = (uid, campo, valor) => {
+    if (!temCotacaoMultiUI()) return;
+    const item = state.cotacaoItens.find(it => it.uid === uid);
+    if (!item) return;
+    if (campo === 'valorVenda') {
+      item.valorVenda = valor;
+    } else if (campo === 'servicoId') {
+      item.servicoId = valor;
+    }
+    calcularCotacao();
+  };
+
+  const coletarItensCotacaoParaEnvio = () => {
+    if (temCotacaoMultiUI()) {
+      const itensValidos = state.cotacaoItens
+        .map(item => ({
+          servicoId: item.servicoId,
+          valorVenda: toNumber(item.valorVenda)
+        }))
+        .filter(item => item.servicoId && item.valorVenda > 0);
+      if (itensValidos.length === 0) {
+        throw new Error('Adicione ao menos um serviço com valor de venda.');
+      }
+      return itensValidos.slice(0, MAX_COTACAO_ITENS);
+    }
+    const servicoId = el('cotacaoServico')?.value;
+    const valorVenda = toNumber(el('valorVenda')?.value);
+    if (!servicoId || !valorVenda) {
+      throw new Error('Preencha cliente, serviço e valor de venda.');
+    }
+    return [{ servicoId, valorVenda }];
+  };
+
+  const obterMoedaDaCotacao = () => {
+    if (temCotacaoMultiUI()) {
+      const select = el('cotacaoMoeda');
+      const moeda = select ? (select.value || 'BRL') : 'BRL';
+      state.cotacaoMoeda = moeda;
+      return moeda;
+    }
+    return 'BRL';
+  };
+
   const renderClientes = () => {
     const select = el('cotacaoCliente');
     if (select) {
@@ -421,17 +627,21 @@
     }
     tabela.innerHTML = '';
     state.clientes.forEach(cliente => {
-      const totalMov = cotacoesVisiveis
-        .filter(c => c.clienteId === cliente.id && c.status === 'fechada')
-        .reduce((sum, cot) => sum + cot.valorVenda, 0);
-      const cotacoesCliente = cotacoesVisiveis.filter(c => c.clienteId === cliente.id).length;
+      const cotacoesClienteLista = cotacoesVisiveis.filter(c => c.clienteId === cliente.id);
+      const cotacoesClienteFechadas = cotacoesClienteLista.filter(c => c.status === 'fechada');
+      const totalMapa = {};
+      cotacoesClienteFechadas.forEach(cot => {
+        adicionarValorPorMoeda(totalMapa, cot.moeda || 'BRL', cot.valorVenda);
+      });
+      const totalMov = formatMapaMoedas(totalMapa);
+      const cotacoesCliente = cotacoesClienteLista.length;
       const idLiteral = jsStringLiteral(cliente.id);
       tabela.innerHTML += `
         <tr>
           <td><strong>${escapeHtml(cliente.nome)}</strong></td>
           <td>${escapeHtml(cliente.documento)}</td>
           <td>${escapeHtml(cliente.telefone || '')}</td>
-          <td>${formatCurrency(totalMov)}</td>
+          <td>${totalMov}</td>
           <td>${cotacoesCliente}</td>
           <td>
             <button class="action-btn" onclick="verHistoricoCliente(${idLiteral})">📖 Histórico</button>
@@ -500,8 +710,8 @@
         <tr>
           <td>${cot.createdAt ? formatDate(cot.createdAt) : '-'}</td>
           <td><strong>${escapeHtml(cot.clienteNome)}</strong></td>
-          <td>${escapeHtml(cot.servicoNome)}</td>
-          <td style="color: var(--accent-gold); font-weight: 700;">${formatCurrency(cot.valorVenda)}</td>
+          <td>${formatarServicosCotacaoHtml(cot)}</td>
+          <td style="color: var(--accent-gold); font-weight: 700;">${formatarTotalCotacaoPorCampo(cot, 'valorVenda')}</td>
           <td><span class="badge ${badgeClass}">${statusLabel}</span></td>
           <td>
             <button class="action-btn action-btn-edit" onclick="mudarStatusCotacao(${idLiteral}, 'fechada')">✓ Fechar</button>
@@ -526,9 +736,9 @@
         <tr>
           <td>${cot.createdAt ? formatDate(cot.createdAt) : '-'}</td>
           <td><strong>${escapeHtml(cot.clienteNome)}</strong></td>
-          <td>${escapeHtml(cot.servicoNome)}</td>
-          <td style="color: var(--accent-gold); font-weight: 700;">${formatCurrency(cot.valorVenda)}</td>
-          <td style="color: var(--success); font-weight: 700;">${formatCurrency(cot.comissao)}</td>
+          <td>${formatarServicosCotacaoHtml(cot)}</td>
+          <td style="color: var(--accent-gold); font-weight: 700;">${formatarTotalCotacaoPorCampo(cot, 'valorVenda')}</td>
+          <td style="color: var(--success); font-weight: 700;">${formatarTotalCotacaoPorCampo(cot, 'comissao')}</td>
           <td>
             <button class="action-btn action-btn-delete" onclick="excluirCotacao(${idLiteral})">🗑️ Excluir</button>
           </td>
@@ -540,12 +750,18 @@
     const base = getCotacoesVisiveis();
     const abertas = base.filter(c => c.status === 'analise' || c.status === 'aguardando').length;
     const fechadas = base.filter(c => c.status === 'fechada').length;
-    const valorTotal = base.filter(c => c.status === 'fechada').reduce((total, c) => total + c.valorVenda, 0);
+    const mapaValorTotal = {};
+    base
+      .filter(c => c.status === 'fechada')
+      .forEach(c => {
+        const mapaCotacao = calcularMapaCotacaoPorCampo(c, 'valorVenda');
+        mesclarMapaMoedas(mapaValorTotal, mapaCotacao);
+      });
     const clientesSet = new Set(base.map(c => c.clienteId));
     const totalClientesIndicador = isAdminUser() ? state.clientes.length : clientesSet.size;
     setText('totalAberto', abertas);
     setText('totalFechado', fechadas);
-    setText('valorTotal', formatCurrency(valorTotal));
+    setText('valorTotal', formatMapaMoedas(mapaValorTotal));
     setText('totalClientes', totalClientesIndicador);
   };
 
@@ -608,13 +824,23 @@
   const renderKycDocumento = (url, label) => {
     if (!url) return '';
     const safeUrl = escapeHtml(url);
-    const isImagem = /^data:image\//i.test(url) || /\.(png|jpe?g|gif|webp)$/i.test((url.split('?')[0] || ''));
-    const conteudo = isImagem
-      ? `<img src="${safeUrl}" alt="${label}" />`
-      : `<a href="${safeUrl}" target="_blank" rel="noopener">${label}</a>`;
+    const normalized = (url.split('?')[0] || '').toLowerCase();
+    const extMatch = normalized.match(/\.([a-z0-9]+)$/);
+    const ext = extMatch ? extMatch[1] : '';
+    const isImagem = /^data:image\//i.test(url) || /\.(png|jpe?g|gif|webp)$/i.test(normalized);
+    const isPdf = /^data:application\/pdf/i.test(url) || ext === 'pdf';
+    const isDoc = /^data:application\/msword/i.test(url) || ext === 'doc';
+    const isDocx = /^data:application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document/i.test(url) || ext === 'docx';
+    if (isImagem) {
+      return `<div class="kyc-doc">
+        <div class="kyc-doc-label">${label}</div>
+        <img src="${safeUrl}" alt="${label}" />
+      </div>`;
+    }
+    const icon = isPdf ? '📄 PDF' : (isDoc || isDocx ? '📝 Documento' : '📎 Arquivo');
     return `<div class="kyc-doc">
       <div class="kyc-doc-label">${label}</div>
-      ${conteudo}
+      <a class="kyc-doc-link" href="${safeUrl}" target="_blank" rel="noopener">${icon} - Abrir</a>
     </div>`;
   };
 
@@ -961,11 +1187,15 @@
     const historico = getCotacoesVisiveis().filter(c => c.clienteId === id);
     let mensagem = `HISTÓRICO DO CLIENTE: ${cliente.nome}\n\n`;
     mensagem += `Total de Cotações: ${historico.length}\n`;
-    const total = historico.reduce((sum, cot) => sum + cot.valorVenda, 0);
-    mensagem += `Total Movimentado: ${formatCurrency(total)}\n\n`;
+    const mapaTotal = {};
+    historico.forEach(cot => {
+      const mapaCotacao = calcularMapaCotacaoPorCampo(cot, 'valorVenda');
+      mesclarMapaMoedas(mapaTotal, mapaCotacao);
+    });
+    mensagem += `Total Movimentado: ${formatMapaMoedas(mapaTotal)}\n\n`;
     historico.forEach(cot => {
       const status = cot.status === 'fechada' ? 'Fechada' : cot.status === 'analise' ? 'Em Análise' : 'Aguardando';
-      mensagem += `${formatDate(cot.createdAt)} - ${cot.servicoNome} - ${status}\n`;
+      mensagem += `${formatDate(cot.createdAt)} - ${formatarServicosCotacaoTexto(cot)} - ${status}\n`;
     });
     alert(mensagem);
   };
@@ -1055,8 +1285,13 @@
       if (input) input.value = '';
     });
     const previewDoc = el('previewDoc');
+    const previewDocInfo = el('previewDocInfo');
     const previewSelfie = el('previewSelfie');
     if (previewDoc) previewDoc.style.display = 'none';
+    if (previewDocInfo) {
+      previewDocInfo.style.display = 'none';
+      previewDocInfo.textContent = '';
+    }
     if (previewSelfie) previewSelfie.style.display = 'none';
     switchTab('comerciais');
   };
@@ -1086,8 +1321,13 @@
     if (docInput) docInput.value = '';
     if (selfieInput) selfieInput.value = '';
     const previewDoc = el('previewDoc');
+    const previewDocInfo = el('previewDocInfo');
     const previewSelfie = el('previewSelfie');
     if (previewDoc) previewDoc.style.display = 'none';
+    if (previewDocInfo) {
+      previewDocInfo.style.display = 'none';
+      previewDocInfo.textContent = '';
+    }
     if (previewSelfie) previewSelfie.style.display = 'none';
     state.comercialEditando = null;
   };
@@ -1098,7 +1338,7 @@
     return nome.includes('usdt') && nome.includes('pix');
   };
 
-  const atualizarResumoCambio = servico => {
+  const atualizarResumoCambio = alvo => {
     const desktopWrapper = document.querySelector('[data-cambio-wrapper]');
     const desktopValor = document.querySelector('[data-cambio-value]');
     const mobileWrapper = el('cotacaoCambioWrapperMobile');
@@ -1109,7 +1349,9 @@
       { wrapper: mobileWrapper, value: mobileValor }
     ];
 
-    const deveExibir = servico && servicoUsdtPix(servico);
+    const deveExibir = typeof alvo === 'boolean'
+      ? alvo
+      : (alvo ? servicoUsdtPix(alvo) : false);
     const valor = Number(state.ticker?.usdtBrl);
     const textoValor = Number.isFinite(valor) ? formatCurrency(valor) : '--';
 
@@ -1126,6 +1368,10 @@
   };
 
   const calcularCotacao = () => {
+    if (temCotacaoMultiUI()) {
+      calcularCotacaoMulti();
+      return;
+    }
     const servicoId = el('cotacaoServico')?.value;
     const valorVenda = toNumber(el('valorVenda')?.value);
     const comissaoPercent = toNumber(el('comissao')?.value);
@@ -1156,39 +1402,106 @@
     setText('resultComissaoPercent', `${comissaoPercent.toFixed(1)}%`);
     setText('resultComissao', formatCurrency(comissao));
     setText('resultFinal', formatCurrency(valorVenda));
-    atualizarResumoCambio(servico);
+    const deveExibirCambio = servicoUsdtPix(servico);
+    if (deveExibirCambio && Number.isFinite(Number(state.ticker?.usdtBrl))) {
+      state.cotacaoUsdtBrl = Number(state.ticker.usdtBrl);
+    } else if (!deveExibirCambio) {
+      state.cotacaoUsdtBrl = null;
+    }
+    atualizarResumoCambio(deveExibirCambio);
+  };
+
+  const calcularCotacaoMulti = () => {
+    const resumoList = el('resumoItensList');
+    const comissaoPercent = toNumber(el('comissao')?.value);
+    const moedaEl = el('cotacaoMoeda');
+    const moeda = moedaEl ? (moedaEl.value || 'BRL') : 'BRL';
+    state.cotacaoMoeda = moeda;
+
+    const itensDetalhados = state.cotacaoItens
+      .map(item => {
+        const servico = state.servicos.find(s => s.id === item.servicoId);
+        const valorVenda = toNumber(item.valorVenda);
+        if (!servico || valorVenda <= 0) return null;
+        const custo = servico.tipoCusto === 'percentual'
+          ? valorVenda * (servico.valor / 100)
+          : servico.valor;
+        return {
+          uid: item.uid,
+          servico,
+          valorVenda,
+          custo,
+          margem: valorVenda - custo,
+          comissao: valorVenda * (comissaoPercent / 100)
+        };
+      })
+      .filter(Boolean);
+
+    if (resumoList) {
+      if (itensDetalhados.length === 0) {
+        resumoList.innerHTML = '<li class="resumo-item">Adicione ao menos um serviço para visualizar o resumo.</li>';
+      } else {
+        resumoList.innerHTML = itensDetalhados.map((item, index) => `
+          <li class="resumo-item">
+            <div class="resumo-item__titulo">
+              <span>${index + 1}. ${escapeHtml(item.servico.nome)}</span>
+              <span>${formatCurrencyByMoeda(item.valorVenda, moeda)}</span>
+            </div>
+            <div class="resumo-item__detalhes">
+              <span>Custo: ${formatCurrencyByMoeda(item.custo, moeda)}</span>
+              <span>Margem: ${formatCurrencyByMoeda(item.margem, moeda)}</span>
+            </div>
+          </li>
+        `).join('');
+      }
+    }
+
+    const totais = itensDetalhados.reduce((acc, item) => ({
+      custo: acc.custo + item.custo,
+      venda: acc.venda + item.valorVenda,
+      margem: acc.margem + item.margem
+    }), { custo: 0, venda: 0, margem: 0 });
+
+    const comissaoTotal = totais.venda * (comissaoPercent / 100);
+    setText('resultCusto', formatCurrencyByMoeda(totais.custo, moeda));
+    setText('resultVenda', formatCurrencyByMoeda(totais.venda, moeda));
+    setText('resultMargem', formatCurrencyByMoeda(totais.margem, moeda));
+    setText('resultComissaoPercent', `${comissaoPercent.toFixed(1)}%`);
+    setText('resultComissao', formatCurrencyByMoeda(comissaoTotal, moeda));
+    setText('resultFinal', formatCurrencyByMoeda(totais.venda, moeda));
+
+    const deveExibirCambio = itensDetalhados.some(item => servicoUsdtPix(item.servico));
+    if (deveExibirCambio && Number.isFinite(Number(state.ticker?.usdtBrl))) {
+      state.cotacaoUsdtBrl = Number(state.ticker.usdtBrl);
+    } else if (!deveExibirCambio) {
+      state.cotacaoUsdtBrl = null;
+    }
+    atualizarResumoCambio(deveExibirCambio);
   };
 
   const salvarCotacao = async status => {
     const clienteId = el('cotacaoCliente')?.value;
-    const servicoId = el('cotacaoServico')?.value;
-    const valorVenda = toNumber(el('valorVenda')?.value);
     const comissaoPercent = toNumber(el('comissao')?.value);
     const observacoes = el('observacoes')?.value.trim();
-    if (!clienteId || !servicoId || !valorVenda) {
-      alert('Preencha cliente, serviço e valor de venda.');
+    if (!clienteId) {
+      alert('Selecione um cliente.');
       return;
     }
-    const servico = state.servicos.find(s => s.id === servicoId);
-    if (!servico) {
-      alert('Serviço inválido.');
+    let itens;
+    try {
+      itens = coletarItensCotacaoParaEnvio();
+    } catch (error) {
+      alert(error.message);
       return;
     }
-    const custo = servico.tipoCusto === 'percentual'
-      ? valorVenda * (servico.valor / 100)
-      : servico.valor;
-    const margem = valorVenda - custo;
-    const comissao = valorVenda * (comissaoPercent / 100);
     const payload = {
       clienteId,
-      servicoId,
-      valorVenda,
-      custo,
-      margem,
       comissaoPercent,
-      comissao,
       observacoes,
-      status: status || 'analise'
+      status: status || 'analise',
+      itens,
+      moeda: obterMoedaDaCotacao(),
+      cotacaoUsdtBrl: state.cotacaoUsdtBrl
     };
     try {
       await apiRequest('/cotacoes', {
@@ -1196,7 +1509,7 @@
         body: JSON.stringify(payload)
       });
       await fetchCotacoes();
-      calcularCotacao();
+      limparFormCotacao();
       alert('Cotação registrada com sucesso!');
     } catch (error) {
       notifyError('Erro ao salvar cotação', error);
@@ -1205,11 +1518,20 @@
 
   const limparFormCotacao = () => {
     setValue('cotacaoCliente', '');
-    setValue('cotacaoServico', '');
-    setValue('custoDisplay', '');
-    setValue('valorVenda', '');
-    setValue('comissao', '');
     setValue('observacoes', '');
+    setValue('comissao', '');
+    state.cotacaoUsdtBrl = null;
+    if (temCotacaoMultiUI()) {
+      const moedaSelect = el('cotacaoMoeda');
+      if (moedaSelect) moedaSelect.value = 'BRL';
+      state.cotacaoMoeda = 'BRL';
+      resetarCotacaoItens();
+      renderCotacaoItens();
+    } else {
+      setValue('cotacaoServico', '');
+      setValue('custoDisplay', '');
+      setValue('valorVenda', '');
+    }
     calcularCotacao();
   };
 
@@ -1270,16 +1592,32 @@
   };
 
   const previewImage = (input, previewId) => {
-    if (!input?.files?.length) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-      const preview = el(previewId);
-      if (preview) {
-        preview.src = e.target.result;
-        preview.style.display = 'block';
+    const preview = el(previewId);
+    const info = el(`${previewId}Info`);
+    if (!input?.files?.length) {
+      if (preview) preview.style.display = 'none';
+      if (info) info.style.display = 'none';
+      return;
+    }
+    const file = input.files[0];
+    const isImagem = file.type?.startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(file.name || '');
+    if (isImagem) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        if (preview) {
+          preview.src = e.target.result;
+          preview.style.display = 'block';
+        }
+        if (info) info.style.display = 'none';
+      };
+      reader.readAsDataURL(file);
+    } else {
+      if (preview) preview.style.display = 'none';
+      if (info) {
+        info.textContent = `Arquivo anexado: ${file.name || file.type || 'documento'}`;
+        info.style.display = 'block';
       }
-    };
-    reader.readAsDataURL(input.files[0]);
+    }
   };
 
   const formatCpfInput = event => {
@@ -1313,6 +1651,9 @@
     excluirComercial,
     limparFormComercial,
     previewImage,
+    adicionarItemCotacao,
+    removerItemCotacao,
+    atualizarItemCotacaoCampo,
     calcularCotacao,
     salvarCotacao,
     limparFormCotacao,

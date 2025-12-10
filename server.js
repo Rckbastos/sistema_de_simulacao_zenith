@@ -165,15 +165,21 @@ const safeComercial = comercial => {
 
 const includeCotacaoRelations = {
   cliente: true,
-  servico: true,
-  comercial: { select: { id: true, nome: true } }
+  comercial: { select: { id: true, nome: true } },
+  itens: {
+    include: { servico: true },
+    orderBy: { ordem: 'asc' }
+  }
 };
 
 const mapCotacao = cotacao => ({
   ...cotacao,
   clienteNome: cotacao.cliente?.nome,
-  servicoNome: cotacao.servico?.nome,
-  comercialNome: cotacao.comercial?.nome
+  comercialNome: cotacao.comercial?.nome,
+  itens: (cotacao.itens || []).map(item => ({
+    ...item,
+    servicoNome: item.servico?.nome
+  }))
 });
 
 const divide = (numerator, denominator) => {
@@ -186,6 +192,13 @@ const divide = (numerator, denominator) => {
 const invert = value => {
   if (!Number.isFinite(value) || value === 0) return null;
   return 1 / value;
+};
+
+const normalizarMoeda = value => {
+  const normalized = (value || 'BRL').toString().trim().toUpperCase();
+  if (!normalized) return 'BRL';
+  const allowed = ['BRL', 'USD'];
+  return allowed.includes(normalized) ? normalized : 'BRL';
 };
 
 const fetchExchangeTicker = async () => {
@@ -349,7 +362,7 @@ app.put('/servicos/:id', authenticate, requirePermission('adminServicos'), async
 
 app.delete('/servicos/:id', authenticate, requirePermission('adminServicos'), asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const vinculos = await prisma.cotacao.count({ where: { servicoId: id } });
+  const vinculos = await prisma.cotacaoServico.count({ where: { servicoId: id } });
   if (vinculos > 0) {
     return res.status(409).json({
       message: 'Não é possível excluir este serviço porque existem cotações vinculadas a ele.'
@@ -524,26 +537,82 @@ app.get('/cotacoes', authenticate, asyncHandler(async (req, res) => {
 app.post('/cotacoes', authenticate, asyncHandler(async (req, res) => {
   const {
     clienteId,
-    servicoId,
-    valorVenda,
-    custo,
-    margem,
     comissaoPercent,
-    comissao,
     observacoes,
-    status
+    status,
+    itens: itensEntrada = [],
+    moeda,
+    cotacaoUsdtBrl
   } = req.body;
+
+  if (!clienteId) {
+    return res.status(400).json({ message: 'Cliente é obrigatório.' });
+  }
+
+  if (!Array.isArray(itensEntrada) || itensEntrada.length === 0) {
+    return res.status(400).json({ message: 'Informe ao menos um serviço na cotação.' });
+  }
+
+  const itensLimitados = itensEntrada.slice(0, 3);
+  const servicoIds = itensLimitados.map(item => item?.servicoId).filter(Boolean);
+  if (servicoIds.length !== itensLimitados.length) {
+    return res.status(400).json({ message: 'Serviço inválido na cotação.' });
+  }
+
+  const servicosDb = await prisma.servico.findMany({ where: { id: { in: servicoIds } } });
+  if (servicosDb.length !== servicoIds.length) {
+    return res.status(400).json({ message: 'Um dos serviços informados não existe.' });
+  }
+
+  const normalizedMoeda = normalizarMoeda(moeda);
+  const comPercent = Number.isFinite(Number(comissaoPercent)) ? Number(comissaoPercent) : 0;
+  const comPercentDecimal = comPercent / 100;
+
+  const itensCalculados = itensLimitados.map((item, index) => {
+    const servico = servicosDb.find(s => s.id === item.servicoId);
+    const valorVendaItem = Number(item.valorVenda);
+    if (!servico || !Number.isFinite(valorVendaItem) || valorVendaItem <= 0) {
+      throw new Error('Valor de venda inválido para o serviço.');
+    }
+    const custoCalculado = servico.tipoCusto === 'percentual'
+      ? valorVendaItem * (servico.valor / 100)
+      : servico.valor;
+    const margemCalculada = valorVendaItem - custoCalculado;
+    const comissaoCalculada = valorVendaItem * comPercentDecimal;
+    return {
+      servicoId: servico.id,
+      valorVenda: valorVendaItem,
+      custo: custoCalculado,
+      margem: margemCalculada,
+      comissaoPercent: comPercent,
+      comissao: comissaoCalculada,
+      moeda: normalizedMoeda,
+      ordem: index + 1
+    };
+  });
+
+  const totais = itensCalculados.reduce(
+    (acc, item) => {
+      acc.valor += item.valorVenda;
+      acc.custo += item.custo;
+      acc.margem += item.margem;
+      acc.comissao += item.comissao;
+      return acc;
+    },
+    { valor: 0, custo: 0, margem: 0, comissao: 0 }
+  );
 
   const data = {
     clienteId,
-    servicoId,
-    valorVenda: parseFloat(valorVenda) || 0,
-    custo: parseFloat(custo) || 0,
-    margem: parseFloat(margem) || 0,
-    comissaoPercent: parseFloat(comissaoPercent) || 0,
-    comissao: parseFloat(comissao) || 0,
+    valorVenda: totais.valor,
+    custo: totais.custo,
+    margem: totais.margem,
+    comissaoPercent: comPercent,
+    comissao: totais.comissao,
     observacoes,
-    status: status || 'analise'
+    status: status || 'analise',
+    moeda: normalizedMoeda,
+    cotacaoUsdtBrl: Number.isFinite(Number(cotacaoUsdtBrl)) ? Number(cotacaoUsdtBrl) : null
   };
 
   if (!isAdminUser(req.user)) {
@@ -552,7 +621,15 @@ app.post('/cotacoes', authenticate, asyncHandler(async (req, res) => {
     data.comercialId = req.body.comercialId;
   }
 
-  const cotacao = await prisma.cotacao.create({ data, include: includeCotacaoRelations });
+  const cotacao = await prisma.cotacao.create({
+    data: {
+      ...data,
+      itens: {
+        create: itensCalculados
+      }
+    },
+    include: includeCotacaoRelations
+  });
   res.status(201).json(mapCotacao(cotacao));
 }));
 

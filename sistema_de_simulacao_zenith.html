@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zenith Pay - Sistema de Cotação v4.0</title>
+    <title>Sistema de Simulação Zenith</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -490,6 +490,12 @@
             border-radius: 8px;
         }
 
+        .file-preview-info {
+            margin-top: 10px;
+            font-size: 13px;
+            color: var(--accent-gold);
+        }
+
         .kyc-filters {
             display: flex;
             flex-wrap: wrap;
@@ -665,6 +671,133 @@
             grid-template-columns: 1fr 1fr 1fr;
             gap: 20px;
         }
+
+        .cotacao-itens {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            margin-bottom: 20px;
+        }
+
+        .cotacao-item {
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 18px;
+            background: var(--bg-secondary);
+        }
+
+        .cotacao-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .cotacao-item-title {
+            font-weight: 600;
+            color: var(--accent-gold);
+        }
+
+        .cotacao-item-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .cotacao-remove-btn {
+            background: transparent;
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            padding: 6px 14px;
+            border-radius: 999px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .cotacao-remove-btn:hover {
+            background: rgba(244, 67, 54, 0.1);
+        }
+
+        .cotacao-add-btn {
+            width: 100%;
+            border: 1px dashed var(--accent-gold);
+            border-radius: 999px;
+            background: transparent;
+            color: var(--accent-gold);
+            padding: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 20px;
+        }
+
+        .cotacao-add-btn:hover {
+            background: rgba(212, 175, 55, 0.1);
+        }
+
+        .resumo-itens-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin: 15px 0;
+        }
+
+        .resumo-item {
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px;
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+            align-items: center;
+            background: var(--bg-card);
+        }
+
+        .resumo-item.resumo-item-empty {
+            justify-content: center;
+            color: var(--text-secondary);
+        }
+
+        .resumo-item-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .resumo-item-title {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .resumo-item-subtitle {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .resumo-item-value {
+            font-weight: 700;
+            color: var(--accent-gold);
+            min-width: 120px;
+            text-align: right;
+        }
+
+        .servico-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(212, 175, 55, 0.1);
+            color: var(--accent-gold);
+            font-size: 12px;
+            font-weight: 600;
+            margin: 2px;
+        }
+
+        .cotacao-servicos-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
         
         .filter-bar {
             background: var(--bg-card);
@@ -816,23 +949,19 @@
                         </div>
                         
                         <div class="form-group">
-                            <label class="form-label">Serviço *</label>
-                            <select class="form-select" id="cotacaoServico" onchange="calcularCotacao()">
-                                <option value="">Selecione um serviço</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label class="form-label">Custo do Serviço</label>
-                            <input type="text" class="form-input" id="custoDisplay" readonly placeholder="Selecione um serviço">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label class="form-label">Valor de Venda *</label>
-                            <div class="input-group">
-                                <span class="input-prefix">R$</span>
-                                <input type="number" class="form-input input-with-prefix" id="valorVenda" placeholder="0,00" oninput="calcularCotacao()">
+                            <label class="form-label">Serviços da Cotação *</label>
+                            <div id="cotacaoItensContainer" class="cotacao-itens">
+                                <div class="resumo-item resumo-item-empty" data-empty-itens>Utilize o botão abaixo para adicionar até 3 serviços.</div>
                             </div>
+                            <button type="button" class="cotacao-add-btn" onclick="adicionarItemCotacao()">➕ Adicionar Serviço</button>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Moeda base</label>
+                            <select class="form-select" id="cotacaoMoeda" onchange="calcularCotacao()">
+                                <option value="BRL">Real (BRL)</option>
+                                <option value="USD">Dólar (USD)</option>
+                            </select>
                         </div>
                         
                         <div class="form-group">
@@ -851,9 +980,13 @@
                     
                     <div class="form-section" style="background: linear-gradient(135deg, var(--bg-secondary) 0%, #1a1a1a 100%); border: 2px solid var(--accent-gold);">
                         <h2 class="section-title">💰 Resumo da Cotação</h2>
-                        
+
+                        <div class="resumo-itens-list" id="resumoItensList">
+                            <div class="resumo-item resumo-item-empty">Nenhum serviço selecionado</div>
+                        </div>
+
                         <div style="padding: 15px 0; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between;">
-                            <span style="color: var(--text-secondary);">Custo do Serviço:</span>
+                            <span style="color: var(--text-secondary);">Custo Total:</span>
                             <span style="font-weight: 700;" id="resultCusto">R$ 0,00</span>
                         </div>
                         
@@ -881,7 +1014,6 @@
                             <span style="color: var(--text-secondary);">Cotação USDT/BRL:</span>
                             <span style="font-weight: 700;" data-cambio-value>--</span>
                         </div>
-                        
                         <div style="padding: 20px 0; border-top: 2px solid var(--accent-gold); margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
                             <span style="font-size: 18px; font-weight: 600; color: var(--accent-gold);">Valor para o Cliente:</span>
                             <span style="font-size: 32px; font-weight: 700; color: var(--accent-gold);" id="resultFinal">R$ 0,00</span>
@@ -1088,9 +1220,10 @@
                         <div class="form-group">
                             <label class="form-label">Documento (RG/CNH) *</label>
                             <div class="file-upload" onclick="document.getElementById('comercialDoc').click()">
-                                <input type="file" id="comercialDoc" accept="image/*" onchange="previewImage(this, 'previewDoc')">
+                                <input type="file" id="comercialDoc" accept="image/*,.png,.jpg,.jpeg,.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onchange="previewImage(this, 'previewDoc')">
                                 <div>📄 Clique para anexar documento</div>
                                 <img id="previewDoc" class="file-preview" style="display: none;">
+                                <div id="previewDocInfo" class="file-preview-info" style="display: none;"></div>
                             </div>
                         </div>
                         

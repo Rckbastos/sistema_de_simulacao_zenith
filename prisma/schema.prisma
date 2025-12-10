@@ -50,15 +50,13 @@ model Servico {
   valor       Float
   status      String    @default("ativo")
   updatedAt   DateTime  @updatedAt @default(now())
-  cotacoes    Cotacao[]
+  itens       CotacaoServico[]
 }
 
 model Cotacao {
   id              String     @id @default(uuid())
   cliente         Cliente    @relation(fields: [clienteId], references: [id])
   clienteId       String
-  servico         Servico    @relation(fields: [servicoId], references: [id])
-  servicoId       String
   comercial       Comercial? @relation(fields: [comercialId], references: [id])
   comercialId     String?
   valorVenda      Float
@@ -68,8 +66,27 @@ model Cotacao {
   comissao        Float
   observacoes     String?
   status          String
+  moeda           String     @default("BRL")
+  cotacaoUsdtBrl  Float?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt @default(now())
+  itens           CotacaoServico[]
+}
+
+model CotacaoServico {
+  id              String   @id @default(uuid())
+  cotacao         Cotacao  @relation(fields: [cotacaoId], references: [id], onDelete: Cascade)
+  cotacaoId       String
+  servico         Servico  @relation(fields: [servicoId], references: [id])
+  servicoId       String
+  valorVenda      Float
+  custo           Float
+  margem          Float
+  comissaoPercent Float
+  comissao        Float
+  moeda           String   @default("BRL")
+  ordem           Int
+  createdAt       DateTime @default(now())
 }
 
 enum KycStatus {
