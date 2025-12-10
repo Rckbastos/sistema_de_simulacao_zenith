@@ -1190,7 +1190,17 @@
       await fetchCotacoes();
       alert('Cliente excluído com sucesso!');
     } catch (error) {
-      notifyError('Erro ao excluir cliente', error);
+      if (
+        typeof error?.message === 'string' &&
+        error.message.includes('Não é possível excluir este cliente porque existem cotações vinculadas a ele')
+      ) {
+        alert(
+          'Não é possível excluir este cliente porque existem cotações vinculadas a ele.\n' +
+            'Exclua ou reatribua as cotações vinculadas antes de tentar novamente.'
+        );
+      } else {
+        notifyError('Erro ao excluir cliente', error);
+      }
     }
   };
 
