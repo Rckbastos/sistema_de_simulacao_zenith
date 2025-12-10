@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const fetchFn = global.fetch || require('node-fetch');
 const { Pool } = require('pg');
 const { PrismaPg } = require('@prisma/adapter-pg');
 const { PrismaClient, Prisma } = require('@prisma/client');
@@ -161,7 +162,7 @@ const fetchAwesomeTicker = async () => {
     return tickerCache.data;
   }
 
-  const response = await fetch(AWESOME_URL);
+  const response = await fetchFn(AWESOME_URL);
   if (!response.ok) {
     throw new Error('Falha ao consultar a AwesomeAPI');
   }
