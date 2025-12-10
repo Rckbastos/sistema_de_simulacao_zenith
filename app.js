@@ -194,7 +194,6 @@
     state.servicoEditando = null;
     state.clienteEditando = null;
     state.comercialEditando = null;
-    pararAtualizacaoTicker();
     if (STORAGE_OK) {
       window.localStorage.removeItem(TOKEN_KEY);
       window.localStorage.removeItem(USER_KEY);
@@ -1124,4 +1123,5 @@
   definirPermissoesPadraoForm();
   calcularCotacao();
   restaurarSessao();
+  iniciarAtualizacaoTicker();
 })();
