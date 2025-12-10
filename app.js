@@ -109,7 +109,7 @@
     if (!track) return;
 
     const pairs = [
-      { label: 'USD/BRL', value: data?.usdBrl },
+      { label: 'BRL/USD', value: data?.brlUsd },
       { label: 'USD/USDT', value: data?.usdUsdt },
       { label: 'BRL/USDT', value: data?.brlUsdt }
     ];

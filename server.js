@@ -35,7 +35,7 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 const FX_CACHE_MS = Math.max(30000, Number(process.env.RATE_CACHE_MS || 60000));
-const AWESOME_URL = 'https://economia.awesomeapi.com.br/json/last/USD-BRL,USD-USDT,BRL-USDT';
+const AWESOME_URL = 'https://economia.awesomeapi.com.br/json/last/USD-BRL,USDT-BRL';
 let tickerCache = { expires: 0, data: null };
 
 const app = express();
@@ -143,6 +143,18 @@ const parseAwesomeValue = pair => {
   return Number.isFinite(value) ? value : null;
 };
 
+const divide = (numerator, denominator) => {
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) {
+    return null;
+  }
+  return numerator / denominator;
+};
+
+const invert = value => {
+  if (!Number.isFinite(value) || value === 0) return null;
+  return 1 / value;
+};
+
 const fetchAwesomeTicker = async () => {
   const now = Date.now();
   if (tickerCache.data && tickerCache.expires > now) {
@@ -156,11 +168,16 @@ const fetchAwesomeTicker = async () => {
 
   const payload = await response.json();
   const usdBrl = parseAwesomeValue(payload?.USDBRL);
-  const usdUsdt = parseAwesomeValue(payload?.USDUSDT);
-  const brlUsdt = parseAwesomeValue(payload?.BRLUSDT);
+  const usdtBrl = parseAwesomeValue(payload?.USDTBRL ?? payload?.USDBRLT);
+
+  const brlUsd = invert(usdBrl);
+  const usdUsdt = divide(usdBrl, usdtBrl);
+  const brlUsdt = invert(usdtBrl);
 
   const data = {
     usdBrl,
+    usdtBrl,
+    brlUsd,
     usdUsdt,
     brlUsdt,
     provider: 'AwesomeAPI',
