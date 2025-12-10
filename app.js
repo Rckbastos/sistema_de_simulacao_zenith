@@ -383,6 +383,13 @@
     setText('userRole', state.user ? (isAdminUser() ? 'Administrador' : 'Comercial') : '');
   };
 
+  const atualizarAcoesCotacao = () => {
+    const btnFechar = el('btnFecharCotacao');
+    if (btnFechar) {
+      btnFechar.style.display = isAdminUser() ? 'inline-flex' : 'none';
+    }
+  };
+
   const showApp = () => {
     const loginScreen = el('loginScreen');
     const appContainer = el('appContainer');
@@ -392,6 +399,7 @@
     }
     updateUserHeader();
     aplicarPermissoesNasTabs();
+    atualizarAcoesCotacao();
     const inicial = obterPrimeiraAbaPermitida();
     if (inicial) {
       switchTab(inicial);
@@ -702,10 +710,16 @@
       return;
     }
     tabela.innerHTML = '';
+    const adminPodeFechar = isAdminUser();
     abertas.forEach(cot => {
       const statusLabel = cot.status === 'analise' ? 'Em Análise' : 'Aguardando Confirmação';
       const badgeClass = cot.status === 'analise' ? 'badge-warning' : 'badge-info';
       const idLiteral = jsStringLiteral(cot.id);
+      const botoesAcao = [];
+      if (adminPodeFechar) {
+        botoesAcao.push(`<button class="action-btn action-btn-edit" onclick="mudarStatusCotacao(${idLiteral}, 'fechada')">✓ Fechar</button>`);
+      }
+      botoesAcao.push(`<button class="action-btn action-btn-delete" onclick="excluirCotacao(${idLiteral})">🗑️ Excluir</button>`);
       tabela.innerHTML += `
         <tr>
           <td>${cot.createdAt ? formatDate(cot.createdAt) : '-'}</td>
@@ -714,8 +728,7 @@
           <td style="color: var(--accent-gold); font-weight: 700;">${formatarTotalCotacaoPorCampo(cot, 'valorVenda')}</td>
           <td><span class="badge ${badgeClass}">${statusLabel}</span></td>
           <td>
-            <button class="action-btn action-btn-edit" onclick="mudarStatusCotacao(${idLiteral}, 'fechada')">✓ Fechar</button>
-            <button class="action-btn action-btn-delete" onclick="excluirCotacao(${idLiteral})">🗑️ Excluir</button>
+            ${botoesAcao.join(' ')}
           </td>
         </tr>`;
     });
@@ -1536,6 +1549,10 @@
   };
 
   const mudarStatusCotacao = async (id, novoStatus) => {
+    if (!isAdminUser()) {
+      alert('Apenas administradores podem alterar o status das cotações.');
+      return;
+    }
     const cotacao = state.cotacoes.find(c => c.id === id);
     if (!cotacao || !podeGerenciarCotacao(cotacao)) {
       alert('Você não pode alterar esta cotação.');

@@ -634,15 +634,17 @@ app.post('/cotacoes', authenticate, asyncHandler(async (req, res) => {
 }));
 
 app.patch('/cotacoes/:id/status', authenticate, asyncHandler(async (req, res) => {
+  if (!isAdminUser(req.user)) {
+    return res.status(403).json({ message: 'Apenas administradores podem alterar o status de cotações.' });
+  }
+
   const { id } = req.params;
   const { status } = req.body;
   const existing = await prisma.cotacao.findUnique({ where: { id } });
   if (!existing) {
     return res.status(404).json({ message: 'Cotação não encontrada' });
   }
-  if (!isAdminUser(req.user) && existing.comercialId !== req.user.id) {
-    return res.status(403).json({ message: 'Sem permissão para alterar esta cotação' });
-  }
+
   const cotacao = await prisma.cotacao.update({
     where: { id },
     data: { status },
