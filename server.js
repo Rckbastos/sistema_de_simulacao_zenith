@@ -36,7 +36,12 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 const FX_CACHE_MS = Math.max(30000, Number(process.env.RATE_CACHE_MS || 60000));
+const FX_TIMEOUT_MS = Math.max(5000, Number(process.env.RATE_TIMEOUT_MS || 8000));
 const AWESOME_URL = 'https://economia.awesomeapi.com.br/json/last/USD-BRL,USDT-BRL';
+const AWESOME_HEADERS = {
+  'User-Agent': 'SistemaSimulacaoZenith/1.0 (+railway.app)',
+  Accept: 'application/json'
+};
 let tickerCache = { expires: 0, data: null };
 
 const app = express();
@@ -162,9 +167,23 @@ const fetchAwesomeTicker = async () => {
     return tickerCache.data;
   }
 
-  const response = await fetchFn(AWESOME_URL);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FX_TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetchFn(AWESOME_URL, { headers: AWESOME_HEADERS, signal: controller.signal });
+  } catch (fetchError) {
+    console.error('Erro de rede ao consultar a AwesomeAPI', fetchError);
+    throw new Error('Falha ao consultar a AwesomeAPI (rede indisponível)');
+  } finally {
+    clearTimeout(timeout);
+  }
+
   if (!response.ok) {
-    throw new Error('Falha ao consultar a AwesomeAPI');
+    const body = await response.text().catch(() => '');
+    console.error('AwesomeAPI respondeu com erro', response.status, body);
+    throw new Error(`Falha ao consultar a AwesomeAPI (${response.status})`);
   }
 
   const payload = await response.json();
