@@ -131,6 +131,13 @@ const requirePermission = permissionKey => (req, res, next) => {
 
 const adminOnly = requirePermission('adminMaster');
 
+const KYC_STATUSES = ['PENDENTE', 'APROVADO', 'REPROVADO'];
+const parseKycStatus = value => {
+  if (!value && value !== 0) return null;
+  const normalized = value.toString().trim().toUpperCase();
+  return KYC_STATUSES.includes(normalized) ? normalized : null;
+};
+
 const safeComercial = comercial => {
   if (!comercial) return null;
   const { senhaHash, ...rest } = comercial;
@@ -385,7 +392,12 @@ app.post('/comerciais', authenticate, requirePermission('comerciais'), asyncHand
       senhaHash,
       permissoes: normalizePermissions(permissoes || {}),
       documentoUrl,
-      selfieUrl
+      selfieUrl,
+      kycStatus: 'PENDENTE',
+      kycObservacao: null,
+      kycRevisorId: null,
+      kycRevisorNome: null,
+      kycRevisadoEm: null
     }
   });
   res.status(201).json(safeComercial(comercial));
@@ -394,17 +406,36 @@ app.post('/comerciais', authenticate, requirePermission('comerciais'), asyncHand
 app.put('/comerciais/:id', authenticate, requirePermission('comerciais'), asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { nome, cpf, pix, status, senha, permissoes, documentoUrl, selfieUrl } = req.body;
+  const current = await prisma.comercial.findUnique({ where: { id } });
+  if (!current) {
+    return res.status(404).json({ message: 'Comercial não encontrado' });
+  }
   const data = {
     nome,
     cpf,
     pix,
     status,
     permissoes: normalizePermissions(permissoes || {}),
-    documentoUrl,
-    selfieUrl
   };
+  if (typeof documentoUrl !== 'undefined') {
+    data.documentoUrl = documentoUrl;
+  }
+  if (typeof selfieUrl !== 'undefined') {
+    data.selfieUrl = selfieUrl;
+  }
   if (senha) {
     data.senhaHash = await bcrypt.hash(senha, 10);
+  }
+  const documentoAlterado = typeof documentoUrl !== 'undefined' && documentoUrl !== current.documentoUrl;
+  const selfieAlterada = typeof selfieUrl !== 'undefined' && selfieUrl !== current.selfieUrl;
+  if (documentoAlterado || selfieAlterada) {
+    Object.assign(data, {
+      kycStatus: 'PENDENTE',
+      kycObservacao: null,
+      kycRevisorId: null,
+      kycRevisorNome: null,
+      kycRevisadoEm: null
+    });
   }
   const comercial = await prisma.comercial.update({ where: { id }, data });
   res.json(safeComercial(comercial));
@@ -420,6 +451,35 @@ app.delete('/comerciais/:id', authenticate, requirePermission('comerciais'), asy
   }
   await prisma.comercial.delete({ where: { id } });
   res.status(204).end();
+}));
+
+// KYC
+app.get('/kyc/comerciais', authenticate, adminOnly, asyncHandler(async (req, res) => {
+  const statusFilter = parseKycStatus(req.query.status);
+  const where = statusFilter ? { kycStatus: statusFilter } : {};
+  const comerciais = await prisma.comercial.findMany({
+    where,
+    orderBy: [{ kycStatus: 'asc' }, { createdAt: 'asc' }]
+  });
+  res.json(comerciais.map(safeComercial));
+}));
+
+app.patch('/kyc/comerciais/:id', authenticate, adminOnly, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { status, observacao } = req.body;
+  const kycStatus = parseKycStatus(status);
+  if (!kycStatus) {
+    return res.status(400).json({ message: 'Status de KYC inválido.' });
+  }
+  const data = {
+    kycStatus,
+    kycObservacao: observacao?.toString().trim() || null,
+    kycRevisorId: kycStatus === 'PENDENTE' ? null : req.user.id,
+    kycRevisorNome: kycStatus === 'PENDENTE' ? null : req.user.nome,
+    kycRevisadoEm: kycStatus === 'PENDENTE' ? null : new Date()
+  };
+  const comercial = await prisma.comercial.update({ where: { id }, data });
+  res.json(safeComercial(comercial));
 }));
 
 // Cotações

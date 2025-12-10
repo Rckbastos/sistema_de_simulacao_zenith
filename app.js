@@ -32,7 +32,8 @@
     'cotacoes-fechadas': 'cotacoesFechadas',
     clientes: 'clientes',
     comerciais: 'comerciais',
-    admin: 'adminServicos'
+    admin: 'adminServicos',
+    kyc: 'adminMaster'
   };
 
   const currencyFormatter = new Intl.NumberFormat('pt-BR', {
@@ -58,7 +59,8 @@
     ticker: null,
     servicoEditando: null,
     clienteEditando: null,
-    comercialEditando: null
+    comercialEditando: null,
+    kycRegistros: []
   };
 
   const el = id => document.getElementById(id);
@@ -591,13 +593,146 @@
     }
   };
 
+  const kycStatusBadge = status => ({
+    PENDENTE: 'badge-warning',
+    APROVADO: 'badge-success',
+    REPROVADO: 'badge-danger'
+  }[status] || 'badge-info');
+
+  const kycStatusLabel = status => ({
+    PENDENTE: 'Pendente',
+    APROVADO: 'Aprovado',
+    REPROVADO: 'Reprovado'
+  }[status] || status || '-');
+
+  const renderKycDocumento = (url, label) => {
+    if (!url) return '';
+    const safeUrl = escapeHtml(url);
+    const isImagem = /^data:image\//i.test(url) || /\.(png|jpe?g|gif|webp)$/i.test(url.split('?')[0] || '');
+    const conteudo = isImagem
+      ? `<img src="${safeUrl}" alt="${label}" />`
+      : `<a href="${safeUrl}" target="_blank" rel="noopener">${label}</a>`;
+    return `<div class="kyc-doc">
+      <div class="kyc-doc-label">${label}</div>
+      ${conteudo}
+    </div>`;
+  };
+
+  const renderKycLista = () => {
+    const lista = el('kycLista');
+    const empty = el('kycEmpty');
+    if (!lista) return;
+    if (!isAdminUser()) {
+      lista.innerHTML = '<div class="kyc-card" style="text-align:center;">Disponível apenas para administradores.</div>';
+      if (empty) empty.style.display = 'none';
+      return;
+    }
+    const busca = (el('kycBusca')?.value || '').toLowerCase();
+    let registros = Array.isArray(state.kycRegistros) ? [...state.kycRegistros] : [];
+    if (busca) {
+      registros = registros.filter(reg =>
+        reg.nome?.toLowerCase().includes(busca) ||
+        reg.cpf?.toLowerCase().includes(busca) ||
+        reg.pix?.toLowerCase().includes(busca)
+      );
+    }
+    if (registros.length === 0) {
+      lista.innerHTML = '';
+      if (empty) empty.style.display = 'block';
+      return;
+    }
+    const cards = registros.map(reg => {
+      const obsId = `kycObs-${reg.id}`;
+      const docs = [
+        renderKycDocumento(reg.documentoUrl, 'Documento'),
+        renderKycDocumento(reg.selfieUrl, 'Selfie')
+      ].filter(Boolean).join('') || '<div class="kyc-doc">Nenhum documento enviado.</div>';
+      const idLiteral = jsStringLiteral(reg.id);
+      return `
+        <div class="kyc-card">
+          <div class="kyc-card-header">
+            <h4>${escapeHtml(reg.nome)}</h4>
+            <span class="badge ${kycStatusBadge(reg.kycStatus)}">${kycStatusLabel(reg.kycStatus)}</span>
+          </div>
+          <div class="kyc-meta">
+            <div><strong>CPF:</strong> ${escapeHtml(reg.cpf || '-')}</div>
+            <div><strong>PIX:</strong> ${escapeHtml(reg.pix || '-')}</div>
+            <div><strong>Enviado em:</strong> ${formatDate(reg.createdAt)}</div>
+            <div><strong>Última revisão:</strong> ${reg.kycRevisadoEm ? `${formatDate(reg.kycRevisadoEm)} por ${escapeHtml(reg.kycRevisorNome || '-')}` : '-'}</div>
+          </div>
+          <div class="kyc-documents">
+            ${docs}
+          </div>
+          <div class="kyc-actions">
+            <textarea id="${obsId}" class="form-input" placeholder="Observações para o comercial">${escapeHtml(reg.kycObservacao || '')}</textarea>
+            <div class="kyc-action-buttons">
+              <button class="btn btn-success" onclick="atualizarKycStatus(${idLiteral}, 'APROVADO')">✅ Aprovar</button>
+              <button class="btn btn-danger" onclick="atualizarKycStatus(${idLiteral}, 'REPROVADO')">🚫 Reprovar</button>
+              <button class="btn btn-secondary" onclick="atualizarKycStatus(${idLiteral}, 'PENDENTE')">↩️ Pendente</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    lista.innerHTML = cards;
+    if (empty) empty.style.display = 'none';
+  };
+
+  const listarKyc = async () => {
+    const listaExiste = el('kycLista');
+    if (!listaExiste || !isAdminUser()) {
+      state.kycRegistros = [];
+      renderKycLista();
+      return;
+    }
+    const filtro = el('kycStatusFiltro')?.value || '';
+    const query = filtro ? `?status=${encodeURIComponent(filtro)}` : '';
+    try {
+      const data = await apiRequest(`/kyc/comerciais${query}`);
+      state.kycRegistros = Array.isArray(data) ? data : [];
+    } catch (error) {
+      notifyError('Erro ao carregar registros de KYC', error);
+    }
+    renderKycLista();
+  };
+
+  const atualizarKycStatus = async (id, novoStatus) => {
+    if (!isAdminUser()) {
+      alert('Apenas administradores podem atualizar o KYC.');
+      return;
+    }
+    const obsEl = el(`kycObs-${id}`);
+    const observacao = obsEl?.value || '';
+    if (novoStatus === 'REPROVADO' && !observacao.trim()) {
+      alert('Informe uma observação para reprovar o KYC.');
+      return;
+    }
+    try {
+      await apiRequest(`/kyc/comerciais/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: novoStatus, observacao })
+      });
+      alert('Status de KYC atualizado com sucesso!');
+      await listarKyc();
+    } catch (error) {
+      notifyError('Erro ao atualizar status de KYC', error);
+    }
+  };
+
   const carregarDados = async () => {
-    await Promise.all([
+    const tarefas = [
       fetchServicos(),
       fetchClientes(),
       fetchComerciais(),
       fetchCotacoes()
-    ]);
+    ];
+    if (isAdminUser()) {
+      tarefas.push(listarKyc());
+    } else {
+      state.kycRegistros = [];
+      renderKycLista();
+    }
+    await Promise.all(tarefas);
   };
 
   const restaurarSessao = async () => {
@@ -665,6 +800,9 @@
     document.querySelectorAll('.tab-content').forEach(section => section.classList.remove('active'));
     const section = el(tabName);
     if (section) section.classList.add('active');
+    if (tabName === 'kyc' && isAdminUser()) {
+      listarKyc();
+    }
   };
 
   const salvarServico = async () => {

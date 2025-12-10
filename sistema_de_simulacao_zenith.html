@@ -489,6 +489,88 @@
             max-width: 200px;
             border-radius: 8px;
         }
+
+        .kyc-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .kyc-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+        }
+
+        .kyc-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .kyc-card h4 {
+            margin: 0;
+            font-size: 18px;
+            color: var(--accent-gold);
+        }
+
+        .kyc-documents {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+        }
+
+        .kyc-documents .kyc-doc {
+            border: 1px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+            font-size: 13px;
+        }
+
+        .kyc-documents img {
+            max-width: 100%;
+            border-radius: 6px;
+            margin-bottom: 6px;
+        }
+
+        .kyc-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .kyc-actions textarea {
+            width: 100%;
+            min-height: 70px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            padding: 10px;
+            resize: vertical;
+        }
+
+        .kyc-action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .kyc-empty {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            background: var(--bg-card);
+        }
         
         .grid-2 {
             display: grid;
@@ -606,6 +688,7 @@
                 <button class="tab" data-tab="clientes" onclick="switchTab('clientes', this)">👥 Clientes</button>
                 <button class="tab admin-only" data-tab="comerciais" data-admin-only="true" onclick="switchTab('comerciais', this)">🤝 Comerciais</button>
                 <button class="tab admin-only" data-tab="admin" data-admin-only="true" onclick="switchTab('admin', this)">⚙️ Admin - Serviços</button>
+                <button class="tab admin-only" data-tab="kyc" data-admin-only="true" onclick="switchTab('kyc', this)">🛡️ KYC</button>
             </div>
             
             <!-- Dashboard Tab -->
@@ -1051,6 +1134,27 @@
                     
                     <button class="btn btn-primary" onclick="salvarServico()">💾 Salvar Serviço</button>
                     <button class="btn btn-secondary" style="margin-left: 10px;" onclick="limparFormAdmin()">🔄 Limpar</button>
+                </div>
+            </div>
+
+            <!-- KYC Tab -->
+            <div id="kyc" class="tab-content">
+                <div class="section-title">🛡️ Gestão de KYC</div>
+
+                <div class="kyc-filters">
+                    <input type="text" class="form-input" id="kycBusca" placeholder="Buscar por comercial..." oninput="renderKycLista()" />
+                    <select class="form-select" id="kycStatusFiltro" onchange="listarKyc()">
+                        <option value="">Todos os status</option>
+                        <option value="PENDENTE">Pendentes</option>
+                        <option value="APROVADO">Aprovados</option>
+                        <option value="REPROVADO">Reprovados</option>
+                    </select>
+                    <button class="btn btn-secondary" onclick="listarKyc()">🔄 Atualizar</button>
+                </div>
+
+                <div class="kyc-grid" id="kycLista"></div>
+                <div class="kyc-empty" id="kycEmpty" style="display: none;">
+                    Nenhum registro de KYC encontrado.
                 </div>
             </div>
         </div>

@@ -13,17 +13,22 @@ datasource db {
 }
 
 model Comercial {
-  id          String    @id @default(uuid())
-  nome        String
-  cpf         String    @unique
-  pix         String    @unique
-  status      String    @default("ativo")
-  senhaHash   String
-  permissoes  Json
-  documentoUrl String?
-  selfieUrl    String?
-  createdAt   DateTime  @default(now())
-  cotacoes    Cotacao[]
+  id             String     @id @default(uuid())
+  nome           String
+  cpf            String     @unique
+  pix            String     @unique
+  status         String     @default("ativo")
+  senhaHash      String
+  permissoes     Json
+  documentoUrl   String?
+  selfieUrl      String?
+  createdAt      DateTime   @default(now())
+  kycStatus      KycStatus  @default(PENDENTE)
+  kycObservacao  String?
+  kycRevisorId   String?
+  kycRevisorNome String?
+  kycRevisadoEm  DateTime?
+  cotacoes       Cotacao[]
 }
 
 model Cliente {
@@ -65,4 +70,10 @@ model Cotacao {
   status          String
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt @default(now())
+}
+
+enum KycStatus {
+  PENDENTE
+  APROVADO
+  REPROVADO
 }
