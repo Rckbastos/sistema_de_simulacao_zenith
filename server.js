@@ -6,7 +6,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
 const { PrismaPg } = require('@prisma/adapter-pg');
-const { PrismaClient } = require('@prisma/client');
+const { PrismaClient, Prisma } = require('@prisma/client');
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
@@ -14,7 +14,23 @@ if (!DATABASE_URL) {
   throw new Error('DATABASE_URL is not configured');
 }
 
-const pool = new Pool({ connectionString: DATABASE_URL });
+const shouldUseSSL = (() => {
+  if ((process.env.DATABASE_SSL || '').toLowerCase() === 'true') {
+    return true;
+  }
+  try {
+    const parsed = new URL(DATABASE_URL);
+    return parsed.hostname.includes('.proxy.rlwy.net');
+  } catch (error) {
+    return false;
+  }
+})();
+
+const poolConfig = { connectionString: DATABASE_URL };
+if (shouldUseSSL) {
+  poolConfig.ssl = { rejectUnauthorized: false };
+}
+const pool = new Pool(poolConfig);
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 const app = express();
@@ -81,12 +97,21 @@ const authenticate = asyncHandler(async (req, res, next) => {
   }
 });
 
-const adminOnly = (req, res, next) => {
-  if (!isAdminUser(req.user)) {
-    return res.status(403).json({ message: 'Acesso restrito ao administrador' });
+const hasPermission = (user, permissionKey) => {
+  if (!user) return false;
+  if (isAdminUser(user)) return true;
+  if (!permissionKey) return false;
+  return Boolean(user.permissoes?.[permissionKey]);
+};
+
+const requirePermission = permissionKey => (req, res, next) => {
+  if (!hasPermission(req.user, permissionKey)) {
+    return res.status(403).json({ message: 'Você não tem permissão para executar esta ação.' });
   }
   next();
 };
+
+const adminOnly = requirePermission('adminMaster');
 
 const safeComercial = comercial => {
   if (!comercial) return null;
@@ -167,7 +192,7 @@ app.get('/servicos', authenticate, asyncHandler(async (req, res) => {
   res.json(servicos);
 }));
 
-app.post('/servicos', authenticate, adminOnly, asyncHandler(async (req, res) => {
+app.post('/servicos', authenticate, requirePermission('adminServicos'), asyncHandler(async (req, res) => {
   const { nome, tipoCusto, valor, status } = req.body;
   const servico = await prisma.servico.create({
     data: {
@@ -180,7 +205,7 @@ app.post('/servicos', authenticate, adminOnly, asyncHandler(async (req, res) => 
   res.status(201).json(servico);
 }));
 
-app.put('/servicos/:id', authenticate, adminOnly, asyncHandler(async (req, res) => {
+app.put('/servicos/:id', authenticate, requirePermission('adminServicos'), asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { nome, tipoCusto, valor, status } = req.body;
   const servico = await prisma.servico.update({
@@ -190,8 +215,14 @@ app.put('/servicos/:id', authenticate, adminOnly, asyncHandler(async (req, res) 
   res.json(servico);
 }));
 
-app.delete('/servicos/:id', authenticate, adminOnly, asyncHandler(async (req, res) => {
+app.delete('/servicos/:id', authenticate, requirePermission('adminServicos'), asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const vinculos = await prisma.cotacao.count({ where: { servicoId: id } });
+  if (vinculos > 0) {
+    return res.status(409).json({
+      message: 'Não é possível excluir este serviço porque existem cotações vinculadas a ele.'
+    });
+  }
   await prisma.servico.delete({ where: { id } });
   res.status(204).end();
 }));
@@ -220,19 +251,25 @@ app.put('/clientes/:id', authenticate, asyncHandler(async (req, res) => {
   res.json(cliente);
 }));
 
-app.delete('/clientes/:id', authenticate, adminOnly, asyncHandler(async (req, res) => {
+app.delete('/clientes/:id', authenticate, requirePermission('clientes'), asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const vinculos = await prisma.cotacao.count({ where: { clienteId: id } });
+  if (vinculos > 0) {
+    return res.status(409).json({
+      message: 'Não é possível excluir este cliente porque existem cotações vinculadas a ele.'
+    });
+  }
   await prisma.cliente.delete({ where: { id } });
   res.status(204).end();
 }));
 
 // Comerciais
-app.get('/comerciais', authenticate, adminOnly, asyncHandler(async (req, res) => {
+app.get('/comerciais', authenticate, requirePermission('comerciais'), asyncHandler(async (req, res) => {
   const comerciais = await prisma.comercial.findMany({ orderBy: { createdAt: 'desc' } });
   res.json(comerciais.map(safeComercial));
 }));
 
-app.post('/comerciais', authenticate, adminOnly, asyncHandler(async (req, res) => {
+app.post('/comerciais', authenticate, requirePermission('comerciais'), asyncHandler(async (req, res) => {
   const { nome, cpf, pix, status, senha, permissoes, documentoUrl, selfieUrl } = req.body;
   if (!senha) {
     return res.status(400).json({ message: 'Senha obrigatória' });
@@ -253,7 +290,7 @@ app.post('/comerciais', authenticate, adminOnly, asyncHandler(async (req, res) =
   res.status(201).json(safeComercial(comercial));
 }));
 
-app.put('/comerciais/:id', authenticate, adminOnly, asyncHandler(async (req, res) => {
+app.put('/comerciais/:id', authenticate, requirePermission('comerciais'), asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { nome, cpf, pix, status, senha, permissoes, documentoUrl, selfieUrl } = req.body;
   const data = {
@@ -272,8 +309,14 @@ app.put('/comerciais/:id', authenticate, adminOnly, asyncHandler(async (req, res
   res.json(safeComercial(comercial));
 }));
 
-app.delete('/comerciais/:id', authenticate, adminOnly, asyncHandler(async (req, res) => {
+app.delete('/comerciais/:id', authenticate, requirePermission('comerciais'), asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const vinculos = await prisma.cotacao.count({ where: { comercialId: id } });
+  if (vinculos > 0) {
+    return res.status(409).json({
+      message: 'Não é possível excluir este comercial porque existem cotações vinculadas a ele.'
+    });
+  }
   await prisma.comercial.delete({ where: { id } });
   res.status(204).end();
 }));
@@ -369,7 +412,24 @@ app.get('/mobile', (req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  console.error(err);
+  console.error(`[${req.method} ${req.originalUrl}]`, err);
+
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (err.code === 'P2002') {
+      return res.status(409).json({ message: 'Já existe um registro utilizando estes dados.' });
+    }
+    if (err.code === 'P2003') {
+      return res.status(409).json({ message: 'Não é possível concluir a operação porque existem registros vinculados.' });
+    }
+    if (err.code === 'P2025') {
+      return res.status(404).json({ message: 'Registro não encontrado.' });
+    }
+  }
+
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ message: 'Corpo da requisição inválido.' });
+  }
+
   res.status(500).json({ message: 'Erro interno no servidor' });
 });
 

@@ -9,7 +9,23 @@ if (!DATABASE_URL) {
   throw new Error('DATABASE_URL is not configured');
 }
 
-const pool = new Pool({ connectionString: DATABASE_URL });
+const shouldUseSSL = (() => {
+  if ((process.env.DATABASE_SSL || '').toLowerCase() === 'true') {
+    return true;
+  }
+  try {
+    const parsed = new URL(DATABASE_URL);
+    return parsed.hostname.includes('.proxy.rlwy.net');
+  } catch (error) {
+    return false;
+  }
+})();
+
+const poolConfig = { connectionString: DATABASE_URL };
+if (shouldUseSSL) {
+  poolConfig.ssl = { rejectUnauthorized: false };
+}
+const pool = new Pool(poolConfig);
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
@@ -99,8 +115,9 @@ async function main() {
   for (const comercial of comerciaisSeed) {
     const senhaHash = await bcrypt.hash(comercial.senha, 10);
     await prisma.comercial.upsert({
-      where: { id: comercial.id },
+      where: { cpf: comercial.cpf },
       update: {
+        id: comercial.id,
         nome: comercial.nome,
         cpf: comercial.cpf,
         pix: comercial.pix,
