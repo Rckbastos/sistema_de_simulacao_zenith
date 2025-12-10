@@ -37,11 +37,18 @@ const prisma = new PrismaClient({ adapter });
 
 const FX_CACHE_MS = Math.max(30000, Number(process.env.RATE_CACHE_MS || 60000));
 const FX_TIMEOUT_MS = Math.max(5000, Number(process.env.RATE_TIMEOUT_MS || 8000));
-const AWESOME_URL = 'https://economia.awesomeapi.com.br/json/last/USD-BRL,USDT-BRL';
-const AWESOME_HEADERS = {
+const EXCHANGE_RATE_API_KEY = process.env.EXCHANGE_RATE_API_KEY?.trim();
+const EXCHANGE_RATE_BASE = 'USD';
+const EXCHANGE_RATE_FALLBACK_URL = `https://open.er-api.com/v6/latest/${EXCHANGE_RATE_BASE}`;
+const EXCHANGE_RATE_URL = process.env.EXCHANGE_RATE_API_URL?.trim()
+  || (EXCHANGE_RATE_API_KEY
+    ? `https://v6.exchangerate-api.com/v6/${EXCHANGE_RATE_API_KEY}/latest/${EXCHANGE_RATE_BASE}`
+    : EXCHANGE_RATE_FALLBACK_URL);
+const FX_HEADERS = {
   'User-Agent': 'SistemaSimulacaoZenith/1.0 (+railway.app)',
   Accept: 'application/json'
 };
+const USD_USDT_FALLBACK = Number(process.env.USD_USDT_FALLBACK || 1);
 let tickerCache = { expires: 0, data: null };
 
 const app = express();
@@ -143,12 +150,6 @@ const mapCotacao = cotacao => ({
   comercialNome: cotacao.comercial?.nome
 });
 
-const parseAwesomeValue = pair => {
-  if (!pair) return null;
-  const value = Number(pair.bid);
-  return Number.isFinite(value) ? value : null;
-};
-
 const divide = (numerator, denominator) => {
   if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) {
     return null;
@@ -161,7 +162,7 @@ const invert = value => {
   return 1 / value;
 };
 
-const fetchAwesomeTicker = async () => {
+const fetchExchangeTicker = async () => {
   const now = Date.now();
   if (tickerCache.data && tickerCache.expires > now) {
     return tickerCache.data;
@@ -172,26 +173,40 @@ const fetchAwesomeTicker = async () => {
 
   let response;
   try {
-    response = await fetchFn(AWESOME_URL, { headers: AWESOME_HEADERS, signal: controller.signal });
+    response = await fetchFn(EXCHANGE_RATE_URL, { headers: FX_HEADERS, signal: controller.signal });
   } catch (fetchError) {
-    console.error('Erro de rede ao consultar a AwesomeAPI', fetchError);
-    throw new Error('Falha ao consultar a AwesomeAPI (rede indisponível)');
+    console.error('Erro de rede ao consultar a ExchangeRate-API', fetchError);
+    throw new Error('Falha ao consultar a ExchangeRate-API (rede indisponível)');
   } finally {
     clearTimeout(timeout);
   }
 
   if (!response.ok) {
     const body = await response.text().catch(() => '');
-    console.error('AwesomeAPI respondeu com erro', response.status, body);
-    throw new Error(`Falha ao consultar a AwesomeAPI (${response.status})`);
+    console.error('ExchangeRate-API respondeu com erro', response.status, body);
+    throw new Error(`Falha ao consultar a ExchangeRate-API (${response.status})`);
   }
 
   const payload = await response.json();
-  const usdBrl = parseAwesomeValue(payload?.USDBRL);
-  const usdtBrl = parseAwesomeValue(payload?.USDTBRL ?? payload?.USDBRLT);
+  const rates = payload?.conversion_rates || payload?.rates;
+  if (!rates || typeof rates !== 'object') {
+    throw new Error('Resposta inválida da ExchangeRate-API (sem taxas)');
+  }
+  const usdBrlRaw = Number(rates?.BRL);
+  const usdUsdtRaw = Number(rates?.USDT);
+
+  if (!Number.isFinite(usdBrlRaw)) {
+    throw new Error('Resposta inválida da ExchangeRate-API (sem taxa BRL)');
+  }
+
+  const usdBrl = usdBrlRaw;
+  let usdUsdt = Number.isFinite(usdUsdtRaw) ? usdUsdtRaw : null;
+  if (!usdUsdt && Number.isFinite(USD_USDT_FALLBACK)) {
+    usdUsdt = USD_USDT_FALLBACK;
+  }
+  const usdtBrl = (usdUsdt ? divide(usdBrl, usdUsdt) : null);
 
   const brlUsd = invert(usdBrl);
-  const usdUsdt = divide(usdBrl, usdtBrl);
   const brlUsdt = invert(usdtBrl);
 
   const data = {
@@ -200,7 +215,7 @@ const fetchAwesomeTicker = async () => {
     brlUsd,
     usdUsdt,
     brlUsdt,
-    provider: 'AwesomeAPI',
+    provider: 'ExchangeRate-API',
     updatedAt: new Date().toISOString()
   };
 
@@ -214,7 +229,7 @@ app.get('/health', (req, res) => {
 
 app.get('/cotacoes/ticker', asyncHandler(async (req, res) => {
   try {
-    const ticker = await fetchAwesomeTicker();
+    const ticker = await fetchExchangeTicker();
     res.json(ticker);
   } catch (error) {
     console.error('Erro ao buscar cotações', error);
