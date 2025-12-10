@@ -1290,7 +1290,9 @@
     mudarStatusCotacao,
     excluirCotacao,
     filtrarCotacoesAbertas,
-    filtrarCotacoesFechadas
+    filtrarCotacoesFechadas,
+    listarKyc,
+    atualizarKycStatus
   };
 
   Object.assign(window, exported);
