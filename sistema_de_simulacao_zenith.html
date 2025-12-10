@@ -521,23 +521,34 @@
         }
 
         .kyc-documents {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 10px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
         }
 
-        .kyc-documents .kyc-doc {
-            border: 1px dashed var(--border-color);
-            border-radius: 8px;
-            padding: 10px;
-            text-align: center;
-            font-size: 13px;
+        .kyc-doc-icon {
+            background: transparent;
+            border: 1px solid var(--accent-gold);
+            color: var(--accent-gold);
+            border-radius: 999px;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
         }
 
-        .kyc-documents img {
-            max-width: 100%;
-            border-radius: 6px;
-            margin-bottom: 6px;
+        .kyc-doc-icon:hover {
+            background: var(--accent-gold);
+            color: #000;
+        }
+
+        .kyc-documents-empty {
+            color: var(--text-secondary);
+            font-size: 14px;
         }
 
         .kyc-actions {
@@ -570,6 +581,77 @@
             border: 1px solid var(--border-color);
             border-radius: 12px;
             background: var(--bg-card);
+        }
+
+        .kyc-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            z-index: 998;
+        }
+
+        .kyc-modal-backdrop.active {
+            display: block;
+        }
+
+        .kyc-modal-container {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+            padding: 20px;
+        }
+
+        .kyc-modal-container.active {
+            display: flex;
+        }
+
+        .kyc-modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--accent-gold);
+            border-radius: 12px;
+            padding: 20px;
+            max-width: 640px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .kyc-modal-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .kyc-modal-docs {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .kyc-doc {
+            border: 1px dashed var(--border-color);
+            border-radius: 10px;
+            padding: 12px;
+            text-align: center;
+            font-size: 13px;
+            background: var(--bg-secondary);
+        }
+
+        .kyc-doc img {
+            max-width: 100%;
+            border-radius: 8px;
+            margin-top: 10px;
         }
         
         .grid-2 {
@@ -1157,6 +1239,15 @@
                     Nenhum registro de KYC encontrado.
                 </div>
             </div>
+
+            <div id="kycDocumentModal" class="kyc-modal-container">
+                <div class="kyc-modal-content">
+                    <button class="kyc-modal-close" onclick="fecharKycDocumentos()">×</button>
+                    <h3 id="kycModalTitulo">Documentos</h3>
+                    <div id="kycModalDocs" class="kyc-modal-docs"></div>
+                </div>
+            </div>
+            <div id="kycModalBackdrop" class="kyc-modal-backdrop" onclick="fecharKycDocumentos()"></div>
         </div>
     </div>
     

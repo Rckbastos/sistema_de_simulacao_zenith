@@ -108,7 +108,26 @@ const authenticate = asyncHandler(async (req, res, next) => {
   try {
     const token = header.replace('Bearer ', '');
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
+    let userPayload = decoded;
+
+    if (decoded?.tipo === 'comercial' && !decoded?.permissoes?.adminMaster) {
+      const comercial = await prisma.comercial.findUnique({ where: { id: decoded.id } });
+      if (!comercial) {
+        return res.status(401).json({ message: 'Sessão inválida. Faça login novamente.' });
+      }
+      if (comercial.kycStatus !== 'APROVADO') {
+        return res.status(403).json({ message: 'Seu cadastro ainda não foi aprovado pelo KYC.' });
+      }
+      userPayload = {
+        id: comercial.id,
+        nome: comercial.nome,
+        tipo: 'comercial',
+        permissoes: normalizePermissions(comercial.permissoes || {}),
+        kycStatus: comercial.kycStatus
+      };
+    }
+
+    req.user = userPayload;
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Sessão expirada' });
@@ -280,11 +299,16 @@ app.post('/auth/login', asyncHandler(async (req, res) => {
     return res.status(401).json({ message: 'Usuário ou senha inválidos' });
   }
 
+  if (comercial.kycStatus !== 'APROVADO') {
+    return res.status(403).json({ message: 'Seu cadastro ainda não foi aprovado pelo KYC.' });
+  }
+
   const payload = {
     id: comercial.id,
     nome: comercial.nome,
     tipo: 'comercial',
-    permissoes: normalizePermissions(comercial.permissoes || {})
+    permissoes: normalizePermissions(comercial.permissoes || {}),
+    kycStatus: comercial.kycStatus
   };
   const token = buildToken(payload);
   res.json({ token, user: payload });

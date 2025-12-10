@@ -608,7 +608,7 @@
   const renderKycDocumento = (url, label) => {
     if (!url) return '';
     const safeUrl = escapeHtml(url);
-    const isImagem = /^data:image\//i.test(url) || /\.(png|jpe?g|gif|webp)$/i.test(url.split('?')[0] || '');
+    const isImagem = /^data:image\//i.test(url) || /\.(png|jpe?g|gif|webp)$/i.test((url.split('?')[0] || ''));
     const conteudo = isImagem
       ? `<img src="${safeUrl}" alt="${label}" />`
       : `<a href="${safeUrl}" target="_blank" rel="noopener">${label}</a>`;
@@ -616,6 +616,35 @@
       <div class="kyc-doc-label">${label}</div>
       ${conteudo}
     </div>`;
+  };
+
+  const abrirKycDocumentos = id => {
+    if (!isAdminUser()) return;
+    const registro = state.kycRegistros.find(item => item.id === id);
+    const modal = el('kycDocumentModal');
+    const backdrop = el('kycModalBackdrop');
+    const docsContainer = el('kycModalDocs');
+    const titulo = el('kycModalTitulo');
+    if (!registro || !modal || !docsContainer) return;
+    const docs = [
+      renderKycDocumento(registro.documentoUrl, 'Documento'),
+      renderKycDocumento(registro.selfieUrl, 'Selfie')
+    ].filter(Boolean).join('') || '<div class="kyc-doc">Nenhum documento enviado.</div>';
+    docsContainer.innerHTML = docs;
+    if (titulo) {
+      titulo.textContent = `Documentos - ${registro.nome || ''}`;
+    }
+    modal.classList.add('active');
+    if (backdrop) backdrop.classList.add('active');
+  };
+
+  const fecharKycDocumentos = () => {
+    const modal = el('kycDocumentModal');
+    const backdrop = el('kycModalBackdrop');
+    const docsContainer = el('kycModalDocs');
+    if (docsContainer) docsContainer.innerHTML = '';
+    if (modal) modal.classList.remove('active');
+    if (backdrop) backdrop.classList.remove('active');
   };
 
   const renderKycLista = () => {
@@ -643,10 +672,10 @@
     }
     const cards = registros.map(reg => {
       const obsId = `kycObs-${reg.id}`;
-      const docs = [
-        renderKycDocumento(reg.documentoUrl, 'Documento'),
-        renderKycDocumento(reg.selfieUrl, 'Selfie')
-      ].filter(Boolean).join('') || '<div class="kyc-doc">Nenhum documento enviado.</div>';
+      const documentos = [reg.documentoUrl, reg.selfieUrl].filter(Boolean);
+      const docsSection = documentos.length
+        ? `<button class="kyc-doc-icon" onclick="abrirKycDocumentos(${idLiteral})">📎 Ver documentos (${documentos.length})</button>`
+        : '<span class="kyc-documents-empty">Nenhum documento enviado.</span>';
       const idLiteral = jsStringLiteral(reg.id);
       return `
         <div class="kyc-card">
@@ -661,7 +690,7 @@
             <div><strong>Última revisão:</strong> ${reg.kycRevisadoEm ? `${formatDate(reg.kycRevisadoEm)} por ${escapeHtml(reg.kycRevisorNome || '-')}` : '-'}</div>
           </div>
           <div class="kyc-documents">
-            ${docs}
+            ${docsSection}
           </div>
           <div class="kyc-actions">
             <textarea id="${obsId}" class="form-input" placeholder="Observações para o comercial">${escapeHtml(reg.kycObservacao || '')}</textarea>
@@ -1292,7 +1321,9 @@
     filtrarCotacoesAbertas,
     filtrarCotacoesFechadas,
     listarKyc,
-    atualizarKycStatus
+    atualizarKycStatus,
+    abrirKycDocumentos,
+    fecharKycDocumentos
   };
 
   Object.assign(window, exported);
