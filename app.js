@@ -86,6 +86,11 @@
     "'": '&#39;'
   })[match]);
 
+  const jsStringLiteral = value => `'${String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')}'`;
+
   const getDefaultPermissoes = () => ({ ...DEFAULT_PERMISSIONS });
   const normalizePermissoes = (permissoes = {}) => {
     const normalized = { ...DEFAULT_PERMISSIONS };
@@ -306,7 +311,7 @@
         ? `${servico.valor}%`
         : formatCurrency(servico.valor);
       const tipoDisplay = servico.tipoCusto === 'percentual' ? 'Percentual (%)' : 'Valor Fixo (R$)';
-      const idLiteral = JSON.stringify(servico.id);
+      const idLiteral = jsStringLiteral(servico.id);
       tr.innerHTML = `
         <td><strong>${escapeHtml(servico.nome)}</strong></td>
         <td><span class="badge badge-info">${tipoDisplay}</span></td>
@@ -345,7 +350,7 @@
         .filter(c => c.clienteId === cliente.id && c.status === 'fechada')
         .reduce((sum, cot) => sum + cot.valorVenda, 0);
       const cotacoesCliente = cotacoesVisiveis.filter(c => c.clienteId === cliente.id).length;
-      const idLiteral = JSON.stringify(cliente.id);
+      const idLiteral = jsStringLiteral(cliente.id);
       tabela.innerHTML += `
         <tr>
           <td><strong>${escapeHtml(cliente.nome)}</strong></td>
@@ -380,7 +385,7 @@
         .filter(([key]) => permissoes[key])
         .map(([, label]) => `<span class="badge badge-info">${label}</span>`)
         .join(' ');
-      const idLiteral = JSON.stringify(comercial.id);
+      const idLiteral = jsStringLiteral(comercial.id);
       tabela.innerHTML += `
         <tr>
           <td><strong>${escapeHtml(comercial.nome)}</strong></td>
@@ -415,7 +420,7 @@
     abertas.forEach(cot => {
       const statusLabel = cot.status === 'analise' ? 'Em Análise' : 'Aguardando Confirmação';
       const badgeClass = cot.status === 'analise' ? 'badge-warning' : 'badge-info';
-      const idLiteral = JSON.stringify(cot.id);
+      const idLiteral = jsStringLiteral(cot.id);
       tabela.innerHTML += `
         <tr>
           <td>${cot.createdAt ? formatDate(cot.createdAt) : '-'}</td>
@@ -441,7 +446,7 @@
     }
     tabela.innerHTML = '';
     fechadas.forEach(cot => {
-      const idLiteral = JSON.stringify(cot.id);
+      const idLiteral = jsStringLiteral(cot.id);
       tabela.innerHTML += `
         <tr>
           <td>${cot.createdAt ? formatDate(cot.createdAt) : '-'}</td>
