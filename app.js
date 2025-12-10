@@ -672,11 +672,11 @@
     }
     const cards = registros.map(reg => {
       const obsId = `kycObs-${reg.id}`;
+      const idLiteral = jsStringLiteral(reg.id);
       const documentos = [reg.documentoUrl, reg.selfieUrl].filter(Boolean);
       const docsSection = documentos.length
         ? `<button class="kyc-doc-icon" onclick="abrirKycDocumentos(${idLiteral})">📎 Ver documentos (${documentos.length})</button>`
         : '<span class="kyc-documents-empty">Nenhum documento enviado.</span>';
-      const idLiteral = jsStringLiteral(reg.id);
       return `
         <div class="kyc-card">
           <div class="kyc-card-header">
