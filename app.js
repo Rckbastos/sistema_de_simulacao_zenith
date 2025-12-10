@@ -55,6 +55,7 @@
     clientes: [],
     comerciais: [],
     cotacoes: [],
+    ticker: null,
     servicoEditando: null,
     clienteEditando: null,
     comercialEditando: null
@@ -109,9 +110,9 @@
     if (!track) return;
 
     const pairs = [
-      { label: 'BRL/USD', value: data?.brlUsd },
+      { label: 'USD/BRL', value: data?.usdBrl },
       { label: 'USD/USDT', value: data?.usdUsdt },
-      { label: 'BRL/USDT', value: data?.brlUsdt }
+      { label: 'USDT/BRL', value: data?.usdtBrl }
     ];
 
     const content = pairs
@@ -135,7 +136,13 @@
         throw new Error('Não foi possível consultar as cotações.');
       }
       const data = await response.json();
+      state.ticker = data;
       renderTicker(data);
+      const servicoId = el('cotacaoServico')?.value;
+      if (servicoId) {
+        const servico = state.servicos.find(s => s.id === servicoId);
+        atualizarResumoCambio(servico);
+      }
     } catch (error) {
       console.warn('Ticker indisponível', error);
     } finally {
@@ -918,6 +925,39 @@
     state.comercialEditando = null;
   };
 
+  const servicoUsdtPix = servico => {
+    if (!servico?.nome) return false;
+    const nome = servico.nome.toLowerCase();
+    return nome.includes('usdt') && nome.includes('pix');
+  };
+
+  const atualizarResumoCambio = servico => {
+    const desktopWrapper = document.querySelector('[data-cambio-wrapper]');
+    const desktopValor = document.querySelector('[data-cambio-value]');
+    const mobileWrapper = el('cotacaoCambioWrapperMobile');
+    const mobileValor = el('resultUsdtBrlMobile');
+
+    const targets = [
+      { wrapper: desktopWrapper, value: desktopValor },
+      { wrapper: mobileWrapper, value: mobileValor }
+    ];
+
+    const deveExibir = servico && servicoUsdtPix(servico);
+    const valor = Number(state.ticker?.usdtBrl);
+    const textoValor = Number.isFinite(valor) ? formatCurrency(valor) : '--';
+
+    targets.forEach(target => {
+      if (!target.wrapper || !target.value) return;
+      if (!deveExibir) {
+        target.wrapper.style.display = 'none';
+        target.value.textContent = '--';
+        return;
+      }
+      target.value.textContent = textoValor;
+      target.wrapper.style.display = 'flex';
+    });
+  };
+
   const calcularCotacao = () => {
     const servicoId = el('cotacaoServico')?.value;
     const valorVenda = toNumber(el('valorVenda')?.value);
@@ -930,6 +970,7 @@
       setText('resultComissao', formatCurrency(0));
       setText('resultComissaoPercent', '0%');
       setText('resultFinal', formatCurrency(valorVenda));
+      atualizarResumoCambio(null);
       return;
     }
     const servico = state.servicos.find(s => s.id === servicoId);
@@ -948,6 +989,7 @@
     setText('resultComissaoPercent', `${comissaoPercent.toFixed(1)}%`);
     setText('resultComissao', formatCurrency(comissao));
     setText('resultFinal', formatCurrency(valorVenda));
+    atualizarResumoCambio(servico);
   };
 
   const salvarCotacao = async status => {
