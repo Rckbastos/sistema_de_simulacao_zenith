@@ -33,6 +33,11 @@ if (shouldUseSSL) {
 const pool = new Pool(poolConfig);
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
+
+const FX_CACHE_MS = Math.max(30000, Number(process.env.RATE_CACHE_MS || 60000));
+const AWESOME_URL = 'https://economia.awesomeapi.com.br/json/last/USD-BRL,USD-USDT,BRL-USDT';
+let tickerCache = { expires: 0, data: null };
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
@@ -132,9 +137,53 @@ const mapCotacao = cotacao => ({
   comercialNome: cotacao.comercial?.nome
 });
 
+const parseAwesomeValue = pair => {
+  if (!pair) return null;
+  const value = Number(pair.bid);
+  return Number.isFinite(value) ? value : null;
+};
+
+const fetchAwesomeTicker = async () => {
+  const now = Date.now();
+  if (tickerCache.data && tickerCache.expires > now) {
+    return tickerCache.data;
+  }
+
+  const response = await fetch(AWESOME_URL);
+  if (!response.ok) {
+    throw new Error('Falha ao consultar a AwesomeAPI');
+  }
+
+  const payload = await response.json();
+  const usdBrl = parseAwesomeValue(payload?.USDBRL);
+  const usdUsdt = parseAwesomeValue(payload?.USDUSDT);
+  const brlUsdt = parseAwesomeValue(payload?.BRLUSDT);
+
+  const data = {
+    usdBrl,
+    usdUsdt,
+    brlUsdt,
+    provider: 'AwesomeAPI',
+    updatedAt: new Date().toISOString()
+  };
+
+  tickerCache = { data, expires: now + FX_CACHE_MS };
+  return data;
+};
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
+
+app.get('/cotacoes/ticker', asyncHandler(async (req, res) => {
+  try {
+    const ticker = await fetchAwesomeTicker();
+    res.json(ticker);
+  } catch (error) {
+    console.error('Erro ao buscar cotações', error);
+    res.status(502).json({ message: 'Não foi possível obter cotações no momento.' });
+  }
+}));
 
 app.post('/auth/login', asyncHandler(async (req, res) => {
   const { identifier, password } = req.body;

@@ -91,6 +91,72 @@
     .replace(/'/g, "\\'")
     .replace(/\n/g, '\\n')}'`;
 
+  const tickerFormatter = new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4
+  });
+  const TICKER_REFRESH_MS = 60000;
+  let tickerTimer = null;
+
+  const formatTickerValue = value => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '--';
+    return tickerFormatter.format(num);
+  };
+
+  const renderTicker = data => {
+    const track = el('tickerTrack');
+    if (!track) return;
+
+    const pairs = [
+      { label: 'USD/BRL', value: data?.usdBrl },
+      { label: 'USD/USDT', value: data?.usdUsdt },
+      { label: 'BRL/USDT', value: data?.brlUsdt }
+    ];
+
+    const content = pairs
+      .map(item => `<span class="ticker-item"><strong>${item.label}</strong><span class="ticker-value">${formatTickerValue(item.value)}</span></span>`)
+      .join('<span class="ticker-item">|</span>');
+
+    track.innerHTML = content ? `${content}${content}` : '<span class="ticker-item">Cotações indisponíveis</span>';
+  };
+
+  const scheduleTickerRefresh = () => {
+    if (tickerTimer) {
+      window.clearTimeout(tickerTimer);
+    }
+    tickerTimer = window.setTimeout(fetchTicker, TICKER_REFRESH_MS);
+  };
+
+  const fetchTicker = async () => {
+    try {
+      const response = await fetch('/cotacoes/ticker');
+      if (!response.ok) {
+        throw new Error('Não foi possível consultar as cotações.');
+      }
+      const data = await response.json();
+      renderTicker(data);
+    } catch (error) {
+      console.warn('Ticker indisponível', error);
+    } finally {
+      scheduleTickerRefresh();
+    }
+  };
+
+  const iniciarAtualizacaoTicker = () => {
+    if (tickerTimer) {
+      window.clearTimeout(tickerTimer);
+    }
+    fetchTicker();
+  };
+
+  const pararAtualizacaoTicker = () => {
+    if (tickerTimer) {
+      window.clearTimeout(tickerTimer);
+      tickerTimer = null;
+    }
+  };
+
   const getDefaultPermissoes = () => ({ ...DEFAULT_PERMISSIONS });
   const normalizePermissoes = (permissoes = {}) => {
     const normalized = { ...DEFAULT_PERMISSIONS };
@@ -128,6 +194,7 @@
     state.servicoEditando = null;
     state.clienteEditando = null;
     state.comercialEditando = null;
+    pararAtualizacaoTicker();
     if (STORAGE_OK) {
       window.localStorage.removeItem(TOKEN_KEY);
       window.localStorage.removeItem(USER_KEY);
@@ -538,6 +605,7 @@
         saveSession(state.token, data.user);
         await carregarDados();
         showApp();
+        iniciarAtualizacaoTicker();
         return;
       }
     } catch (error) {
@@ -562,6 +630,7 @@
       saveSession(data.token, data.user);
       await carregarDados();
       showApp();
+      iniciarAtualizacaoTicker();
     } catch (error) {
       notifyError('Falha no login', error);
     }

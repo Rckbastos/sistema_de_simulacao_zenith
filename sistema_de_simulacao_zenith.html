@@ -64,8 +64,45 @@
             display: none;
             padding: 20px;
         }
-        
+
         .app-container.active { display: block; }
+        
+        .ticker-bar {
+            background: var(--bg-secondary);
+            border: 1px solid var(--accent-gold);
+            border-radius: 999px;
+            margin-bottom: 20px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .ticker-track {
+            display: inline-flex;
+            gap: 40px;
+            padding: 8px 20px;
+            animation: ticker-scroll 25s linear infinite;
+            white-space: nowrap;
+        }
+
+        .ticker-item {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .ticker-item strong {
+            color: var(--text-primary);
+            margin-right: 6px;
+        }
+
+        .ticker-value {
+            color: var(--accent-gold);
+            font-weight: 600;
+        }
+
+        @keyframes ticker-scroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
         
         .container {
             max-width: 1400px;
@@ -551,6 +588,12 @@
                     <div class="user-name" id="userName">Admin</div>
                     <div class="user-role" id="userRole">Administrador</div>
                     <button class="btn-logout" onclick="fazerLogout()">🚪 Sair</button>
+                </div>
+            </div>
+
+            <div class="ticker-bar" id="tickerBar">
+                <div class="ticker-track" id="tickerTrack">
+                    <span class="ticker-item">Carregando cotações...</span>
                 </div>
             </div>
             
