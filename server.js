@@ -71,14 +71,14 @@ const DEFAULT_PERMISSIONS = {
 };
 
 const INVOICE_DEFAULTS = {
-  companyName: process.env.INVOICE_COMPANY_NAME || 'ZENITH PAY',
-  addressLine1: process.env.INVOICE_COMPANY_ADDRESS1 || '[Company Address Line 1]',
-  addressLine2: process.env.INVOICE_COMPANY_ADDRESS2 || '[City, State, Postal Code, Country]',
-  phone: process.env.INVOICE_COMPANY_PHONE || 'Tel: [Phone Number]',
-  fax: process.env.INVOICE_COMPANY_FAX || 'Fax: [Fax Number]',
-  email: process.env.INVOICE_COMPANY_EMAIL || 'Email: [Email Address]',
-  website: process.env.INVOICE_COMPANY_WEBSITE || 'Web: www.zenithpay.com',
-  taxId: process.env.INVOICE_COMPANY_TAX || 'Tax ID: [Tax ID Number]',
+  companyName: 'ZENITH PAY',
+  addressLine1: 'C. N PAGAMENTOS ONLINE LTDA',
+  addressLine2: 'R. WASHINGTON LUIS, 59, LOTE 10B, QUADRA 43, CXPST 20 - CENTRO, NOSSA SENHORA DAS GRÇAS – PR – CEP: 86.680-000 – BRASIL',
+  phone: 'Tel: [Telefone]',
+  fax: 'Fax: [Fax]',
+  email: 'Email: [Email]',
+  website: 'Web: www.zenithpay.com',
+  taxId: 'CNPJ/Tax ID: 53.213.723/0001-35',
   romalpaClause:
     process.env.INVOICE_ROMALPA_CLAUSE
     || 'Goods sold and delivered remain the property of Zenith Pay until full payment is received.',
