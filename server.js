@@ -355,11 +355,6 @@ const numberToWordsUSD = (value) => {
   return result + '';
 };
 
-const normalizeInvoiceLang = (value) => {
-  const v = (value || '').toString().trim().toLowerCase();
-  return v === 'en' ? 'en' : 'pt';
-};
-
 const formatInvoiceNumber = (dateObj, counter) => {
   const year = dateObj.getFullYear();
   const month = String(dateObj.getMonth() + 1).padStart(2, '0');
