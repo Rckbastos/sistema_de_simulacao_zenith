@@ -375,8 +375,8 @@ const renderInvoicePdf = (res, invoice) => {
   doc.moveDown(1.5).fillColor('#000').fontSize(11);
 
   // Invoice info container
-  const gap = 20;
-  const leftWidth = (pageWidth - gap) * 0.6;
+  const gap = 24;
+  const leftWidth = (pageWidth - gap) * 0.58;
   const rightWidth = pageWidth - gap - leftWidth;
   const infoTop = doc.y;
 
@@ -402,7 +402,7 @@ const renderInvoicePdf = (res, invoice) => {
 
   // Invoice box
   const boxX = startX + leftWidth + gap;
-  const boxPadding = 12;
+  const boxPadding = 14;
   const boxLabelWidth = 140;
   let boxY = infoTop;
   let cursorY = boxY + boxPadding;
@@ -420,18 +420,18 @@ const renderInvoicePdf = (res, invoice) => {
       width: rightWidth - boxPadding * 2 - boxLabelWidth - 6,
       align: 'right'
     });
-    cursorY += 16;
+    cursorY += 17;
   });
-  const boxHeight = cursorY - boxY + boxPadding;
+  const boxHeight = Math.max(110, cursorY - boxY + boxPadding);
   doc.rect(boxX, boxY, rightWidth, boxHeight).lineWidth(2).stroke();
 
-  doc.y = Math.max(leftBottom, boxY + boxHeight) + 24;
+  doc.y = Math.max(leftBottom, boxY + boxHeight) + 28;
 
   // Items table (single layout)
   const items = invoice.items || [];
   if (items.length) {
     const tableTop = doc.y;
-    const colWidths = [40, 100, Math.max(200, pageWidth - (40 + 100 + 90 + 110 + 120)), 90, 110, 120];
+    const colWidths = [40, 70, 200, 70, 80, 55]; // sum = 515 (pageWidth)
     const colX = [];
     colWidths.reduce((acc, w, i) => { colX[i] = acc; return acc + w; }, startX);
     const headerHeight = 26;
@@ -445,7 +445,7 @@ const renderInvoicePdf = (res, invoice) => {
     items.forEach(item => {
       const desc = item.description || '-';
       const descHeight = doc.heightOfString(desc, { width: colWidths[2] - 12, lineGap: 2, align: 'left' });
-      const baseHeight = Math.max(28, descHeight + 10);
+      const baseHeight = Math.max(32, descHeight + 12);
       doc.rect(startX, rowY, pageWidth, baseHeight).stroke();
       for (let i = 1; i < colWidths.length; i++) {
         line(colX[i], rowY, colX[i], rowY + baseHeight);
@@ -455,8 +455,8 @@ const renderInvoicePdf = (res, invoice) => {
       doc.text(item.partNumber || '-', colX[1] + 6, rowY + 8, { width: colWidths[1] - 12 });
       doc.text(desc, colX[2] + 6, rowY + 6, { width: colWidths[2] - 12, lineGap: 2 });
       doc.text(`${item.quantity} ${item.unit || ''}`.trim(), colX[3], rowY + 8, { width: colWidths[3], align: 'center' });
-      doc.text(formatMoney(item.unitPrice), colX[4], rowY + 8, { width: colWidths[4] - 12, align: 'right' });
-      doc.text(formatMoney(item.total), colX[5], rowY + 8, { width: colWidths[5] - 12, align: 'right' });
+      doc.text(formatMoney(item.unitPrice), colX[4], rowY + 8, { width: colWidths[4] - 8, align: 'right' });
+      doc.text(formatMoney(item.total), colX[5], rowY + 8, { width: colWidths[5] - 8, align: 'right' });
       rowY += baseHeight;
     });
     doc.y = rowY + 20;
