@@ -987,6 +987,7 @@
                 <button class="tab admin-only" data-tab="admin" data-admin-only="true" onclick="switchTab('admin', this)">⚙️ Admin - Serviços</button>
                 <button class="tab admin-only" data-tab="kyc" data-admin-only="true" onclick="switchTab('kyc', this)">🛡️ KYC</button>
                 <button class="tab admin-only" data-tab="invoice" data-admin-only="true" onclick="switchTab('invoice', this)">🧾 Invoice</button>
+                <button class="tab admin-only" data-tab="invoice-historico" data-admin-only="true" onclick="switchTab('invoice-historico', this)">📜 Histórico Invoices</button>
             </div>
             
             <!-- Dashboard Tab -->
@@ -1547,26 +1548,6 @@
                             </div>
                         </div>
 
-                        <h3 class="section-title" style="margin: 25px 0 15px; display:flex; align-items:center; justify-content: space-between; gap:10px;">📜 Histórico de Invoices
-                            <button class="action-btn" style="margin-left:auto;" onclick="fetchInvoiceHistorico()">🔄 Atualizar</button>
-                        </h3>
-                        <div class="table-responsive" style="overflow-x:auto;">
-                          <table class="table" style="width:100%;">
-                            <thead>
-                              <tr>
-                                <th>Número</th>
-                                <th>Data</th>
-                                <th>Cliente</th>
-                                <th>Total</th>
-                                <th>Ações</th>
-                              </tr>
-                            </thead>
-                            <tbody id="invoiceHistoricoBody">
-                              <tr><td colspan="5" style="text-align:center; padding:12px; color: var(--text-secondary);">Nenhuma invoice gerada ainda.</td></tr>
-                            </tbody>
-                          </table>
-                        </div>
-
                         <div class="form-group">
                             <label class="form-label">Observações e Observância Legal</label>
                             <textarea class="form-textarea" id="invoiceObservacoes" placeholder="Informações adicionais para o cliente"></textarea>
@@ -1680,6 +1661,32 @@
                             <button class="btn btn-secondary" onclick="limparInvoiceForm()">🧹 Limpar</button>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Invoice History Tab -->
+            <div id="invoice-historico" class="tab-content">
+                <div class="section-title" style="display:flex;align-items:center;gap:10px;">📜 Histórico de Invoices
+                    <button class="action-btn" style="margin-left:auto;" onclick="fetchInvoiceHistorico()">🔄 Atualizar</button>
+                </div>
+                <p class="section-subtitle" style="color: var(--text-secondary); margin-bottom: 15px;">
+                    Lista de invoices geradas. Clique em baixar para obter o PDF.
+                </p>
+                <div class="table-responsive" style="overflow-x:auto;">
+                    <table class="table" style="width:100%;">
+                        <thead>
+                            <tr>
+                                <th>Número</th>
+                                <th>Data</th>
+                                <th>Cliente</th>
+                                <th>Total</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoiceHistoricoBody">
+                            <tr><td colspan="5" style="text-align:center; padding:12px; color: var(--text-secondary);">Nenhuma invoice gerada ainda.</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 

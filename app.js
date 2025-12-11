@@ -34,7 +34,8 @@
     comerciais: 'comerciais',
     admin: 'adminServicos',
     kyc: 'adminMaster',
-    invoice: 'adminMaster'
+    invoice: 'adminMaster',
+    'invoice-historico': 'adminMaster'
   };
 
   const currencyFormatter = new Intl.NumberFormat('pt-BR', {
@@ -1694,6 +1695,10 @@
       calcularInvoiceResumo();
       fetchInvoiceHistorico();
       setInvoiceStatus('');
+    }
+    if (tabName === 'invoice-historico') {
+      fetchInvoiceHistorico();
+      renderInvoiceHistorico();
     }
   };
 
