@@ -355,6 +355,45 @@ const numberToWordsUSD = (value) => {
   return result + '';
 };
 
+const normalizeInvoiceLang = (value) => {
+  const v = (value || '').toString().trim().toLowerCase();
+  return v === 'en' ? 'en' : 'pt';
+};
+
+const formatInvoiceNumber = (dateObj, counter) => {
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const suffix = String(counter).padStart(2, '0');
+  return `INV-${year}${month}${suffix}`;
+};
+
+const reserveInvoiceNumber = async (invoiceDate) => {
+  const dateObj = invoiceDate instanceof Date ? invoiceDate : new Date(invoiceDate || Date.now());
+  if (Number.isNaN(dateObj.getTime())) {
+    throw new Error('Data da invoice inválida');
+  }
+  const year = dateObj.getFullYear();
+  const month = dateObj.getMonth() + 1;
+  return prisma.$transaction(async tx => {
+    const last = await tx.invoiceRecord.findFirst({
+      where: { year },
+      orderBy: { counter: 'desc' }
+    });
+    const counter = (last?.counter || 0) + 1;
+    const number = formatInvoiceNumber(dateObj, counter);
+    await tx.invoiceRecord.create({
+      data: {
+        number,
+        year,
+        month,
+        counter,
+        payload: Prisma.JsonNull
+      }
+    });
+    return { number, year, month, counter, invoiceDate: dateObj.toISOString().slice(0, 10) };
+  });
+};
+
 const buildInvoicePayload = payload => {
   const invoiceDate = sanitizeText(payload.invoiceDate, new Date().toISOString().slice(0, 10));
   const invoiceNumber = sanitizeText(payload.invoiceNumber, `INV-${invoiceDate.replace(/-/g, '')}`);
@@ -868,6 +907,15 @@ app.post('/invoices/generate', authenticate, adminOnly, asyncHandler(async (req,
     return res.status(400).json({ message: 'Inclua ao menos um item na invoice.' });
   }
 
+  let numeroReservado;
+  try {
+    const dataInvoice = body.invoiceDate || new Date().toISOString().slice(0, 10);
+    numeroReservado = await reserveInvoiceNumber(dataInvoice);
+  } catch (error) {
+    console.error('Erro ao reservar número da invoice', error);
+    return res.status(500).json({ message: 'Não foi possível reservar número para a invoice.' });
+  }
+
   const clientePayload = buildClienteDataFromInvoice({
     ...body,
     customerName: body.customerName,
@@ -906,8 +954,19 @@ app.post('/invoices/generate', authenticate, adminOnly, asyncHandler(async (req,
   const payload = buildInvoicePayload({
     ...clienteData,
     ...body,
+    invoiceNumber: numeroReservado.number,
+    invoiceDate: numeroReservado.invoiceDate,
     items
   });
+
+  try {
+    await prisma.invoiceRecord.update({
+      where: { number: numeroReservado.number },
+      data: { payload }
+    });
+  } catch (error) {
+    console.error('Erro ao armazenar invoice gerada', error);
+  }
 
   return renderInvoicePdf(res, payload);
 }));

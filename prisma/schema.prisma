@@ -104,6 +104,18 @@ model CotacaoServico {
   createdAt       DateTime @default(now())
 }
 
+model InvoiceRecord {
+  id        String   @id @default(uuid())
+  number    String   @unique
+  year      Int
+  month     Int
+  counter   Int
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  @@index([year, counter], map: "idx_invoice_year_counter")
+}
+
 enum KycStatus {
   PENDENTE
   APROVADO
