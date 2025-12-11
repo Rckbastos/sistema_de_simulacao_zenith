@@ -297,7 +297,7 @@ const numberToWordsUSD = (value) => {
   if (cents > 0) {
     result += ' E ' + convertGroup(cents) + (cents === 1 ? ' CENTAVO' : ' CENTAVOS');
   }
-  return result + ' APENAS';
+  return result + '';
 };
 
 const buildInvoicePayload = payload => {
@@ -572,7 +572,7 @@ const renderInvoicePdf = (res, invoice) => {
   doc.text(formatMoney(invoice.totals.total), totalsStartX + totalsLabelW, grandStartY + 5, { width: totalsValueW, align: 'right' });
   line(totalsStartX, grandStartY + 22, startX + pageWidth, grandStartY + 22, 3);
   doc.y = grandStartY + 30;
-  doc.font('Helvetica-Oblique').fontSize(9).text(`(DIGA-SE ${invoice.totals?.amountInWords || 'VALOR NÃO ESPECIFICADO'})`, startX, doc.y, { width: pageWidth, align: 'right' });
+  doc.font('Helvetica-Oblique').fontSize(9).text(`( ${invoice.totals?.amountInWords || 'VALOR NÃO ESPECIFICADO'})`, startX, doc.y, { width: pageWidth, align: 'right' });
   doc.moveDown(1);
 
   // Additional info
@@ -705,15 +705,6 @@ const renderInvoicePdf = (res, invoice) => {
   });
 
   doc.y = sigLineY + 20;
-
-  doc.font('Helvetica-Oblique').fontSize(7).fillColor('#666');
-  const footerY = Math.min(doc.page.height - doc.page.margins.bottom - 12, doc.y);
-  doc.text(
-    'Esta é uma fatura gerada por computador. Nenhuma assinatura necessária.',
-    startX,
-    footerY,
-    { align: 'center', width: pageWidth }
-  );
 
   doc.end();
 };
