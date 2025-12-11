@@ -1529,14 +1529,6 @@
                             </div>
                         </div>
 
-                        <div class="form-group">
-                            <label class="form-label">Idioma do PDF</label>
-                            <select class="form-select" id="invoiceLanguage" onchange="atualizarInvoiceCampo('language', this.value)">
-                                <option value="pt">Português</option>
-                                <option value="en">English</option>
-                            </select>
-                        </div>
-
                         <div class="grid-2">
                             <div class="form-group" style="margin:0;">
                                 <label class="form-label">Payment Terms</label>
@@ -1656,7 +1648,14 @@
                             </div>
                         </div>
 
-                        <div class="btn-group" style="margin-top: 20px;">
+                        <div class="btn-group" style="margin-top: 20px; align-items: center; gap: 10px;">
+                            <div class="form-group" style="margin:0; min-width: 180px;">
+                                <label class="form-label">Idioma do PDF</label>
+                                <select class="form-select" id="invoiceLanguage" onchange="atualizarInvoiceCampo('language', this.value)">
+                                    <option value="pt">Português</option>
+                                    <option value="en">English</option>
+                                </select>
+                            </div>
                             <button class="btn btn-success" onclick="gerarInvoice()">🧾 Gerar PDF</button>
                             <button class="btn btn-secondary" onclick="limparInvoiceForm()">🧹 Limpar</button>
                         </div>
