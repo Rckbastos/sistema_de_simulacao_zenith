@@ -699,19 +699,19 @@ const renderInvoicePdf = (res, invoice) => {
     width: sigWidth,
     align: 'center'
   });
-  doc.text('Assinatura Autorizada', rightSigX, sigLineY + 5, {
+  doc.text('CARIMBO E ASSINATURA', rightSigX, sigLineY + 5, {
     width: sigWidth,
     align: 'center'
   });
 
   doc.y = sigLineY + 25;
 
-  doc.moveDown(0.8);
   doc.font('Helvetica-Oblique').fontSize(7).fillColor('#666');
+  const footerY = Math.min(doc.page.height - doc.page.margins.bottom - 12, doc.y);
   doc.text(
     'Esta é uma fatura gerada por computador. Nenhuma assinatura necessária.',
     startX,
-    doc.y,
+    footerY,
     { align: 'center', width: pageWidth }
   );
 
