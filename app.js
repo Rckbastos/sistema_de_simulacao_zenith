@@ -258,6 +258,7 @@
   const resetarInvoice = () => {
     state.invoiceForm = getDefaultInvoiceForm();
     state.invoiceItens = [novoInvoiceItem()];
+    state.invoiceHistorico = [];
   };
   const prepararEstadoInvoice = () => {
     if (!state.invoiceForm || !Array.isArray(state.invoiceItens) || state.invoiceItens.length === 0) {
@@ -731,6 +732,66 @@
     select.value = selecionado && state.clientes.some(c => c.id === selecionado) ? selecionado : '';
   };
 
+  const renderInvoiceHistorico = () => {
+    const tbody = el('invoiceHistoricoBody');
+    if (!tbody) return;
+    if (!state.invoiceHistorico.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:12px; color: var(--text-secondary);">Nenhuma invoice gerada ainda.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = state.invoiceHistorico.map(inv => {
+      const data = inv.createdAt ? formatDate(inv.createdAt) : (inv.invoiceDate || '-');
+      const totalFmt = formatCurrencyByMoeda(inv.total || 0, inv.currency || 'USD');
+      const cliente = escapeHtml(inv.customerName || '-');
+      const numero = escapeHtml(inv.number);
+      return `
+        <tr>
+          <td>${numero}</td>
+          <td>${data}</td>
+          <td>${cliente}</td>
+          <td>${totalFmt}</td>
+          <td><button class="action-btn" onclick="baixarInvoicePdf('${numero}')">⬇️ PDF</button></td>
+        </tr>
+      `;
+    }).join('');
+  };
+
+  const fetchInvoiceHistorico = async () => {
+    if (!isAdminUser()) {
+      setInvoiceStatus('Apenas administradores podem ver o histórico.', 'error');
+      return;
+    }
+    try {
+      const data = await apiRequest('/invoices');
+      state.invoiceHistorico = Array.isArray(data) ? data : [];
+      renderInvoiceHistorico();
+    } catch (error) {
+      setInvoiceStatus(error.message || 'Erro ao carregar histórico de invoices.', 'error');
+    }
+  };
+
+  const baixarInvoicePdf = async (numero) => {
+    if (!numero) return;
+    try {
+      setInvoiceStatus(`Baixando invoice ${numero}...`, '');
+      const blob = await apiRequest(`/invoices/${encodeURIComponent(numero)}/pdf`, {
+        method: 'GET',
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${numero}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setInvoiceStatus('Download iniciado.', 'success');
+    } catch (error) {
+      setInvoiceStatus(error.message || 'Erro ao baixar invoice.', 'error');
+    }
+  };
+
   const renderInvoiceForm = () => {
     if (!temInvoiceUI()) return;
     const form = state.invoiceForm || getDefaultInvoiceForm();
@@ -764,6 +825,10 @@
     if (moedaSelect) {
       moedaSelect.value = form.moeda || 'USD';
     }
+    const langSelect = el('invoiceLanguage');
+    if (langSelect) {
+      langSelect.value = form.language || 'pt';
+    }
   };
 
   const coletarInvoiceFormDoDom = () => {
@@ -776,7 +841,7 @@
     form.clienteEmail = (el('invoiceClienteEmail')?.value || '').trim();
     form.clienteTelefone = (el('invoiceClienteTelefone')?.value || '').trim();
     form.clienteEndereco = (el('invoiceClienteEndereco')?.value || '').trim();
-    form.invoiceNumber = (el('invoiceNumero')?.value || '').trim();
+    form.invoiceNumber = '';
     form.invoiceDate = (el('invoiceData')?.value || form.invoiceDate || getDefaultInvoiceForm().invoiceDate);
     form.moeda = normalizarMoedaLocal(el('invoiceMoeda')?.value || form.moeda || 'USD');
     form.language = (el('invoiceLanguage')?.value || form.language || 'pt').trim() || 'pt';
@@ -1152,6 +1217,7 @@
       a.remove();
       window.URL.revokeObjectURL(url);
       setInvoiceStatus('Invoice gerada com sucesso! O download foi iniciado.', 'success');
+      fetchInvoiceHistorico();
     } catch (error) {
       setInvoiceStatus(error.message || 'Erro ao gerar invoice.', 'error');
     }
@@ -1626,6 +1692,7 @@
       renderInvoiceForm();
       renderInvoiceItens();
       calcularInvoiceResumo();
+      fetchInvoiceHistorico();
       setInvoiceStatus('');
     }
   };

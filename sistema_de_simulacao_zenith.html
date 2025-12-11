@@ -1513,7 +1513,7 @@
                         <div class="grid-3">
                             <div class="form-group" style="margin:0;">
                                 <label class="form-label">Nº da Invoice</label>
-                                <input type="text" class="form-input" id="invoiceNumero" placeholder="INV-2025-001">
+                                <input type="text" class="form-input" id="invoiceNumero" placeholder="Gerado automaticamente" disabled>
                             </div>
                             <div class="form-group" style="margin:0;">
                                 <label class="form-label">Data</label>
@@ -1545,6 +1545,26 @@
                                 <label class="form-label">Delivery Terms</label>
                                 <input type="text" class="form-input" id="invoiceDeliveryTerms" placeholder="Ex: FOB">
                             </div>
+                        </div>
+
+                        <h3 class="section-title" style="margin: 25px 0 15px; display:flex; align-items:center; justify-content: space-between; gap:10px;">📜 Histórico de Invoices
+                            <button class="action-btn" style="margin-left:auto;" onclick="fetchInvoiceHistorico()">🔄 Atualizar</button>
+                        </h3>
+                        <div class="table-responsive" style="overflow-x:auto;">
+                          <table class="table" style="width:100%;">
+                            <thead>
+                              <tr>
+                                <th>Número</th>
+                                <th>Data</th>
+                                <th>Cliente</th>
+                                <th>Total</th>
+                                <th>Ações</th>
+                              </tr>
+                            </thead>
+                            <tbody id="invoiceHistoricoBody">
+                              <tr><td colspan="5" style="text-align:center; padding:12px; color: var(--text-secondary);">Nenhuma invoice gerada ainda.</td></tr>
+                            </tbody>
+                          </table>
                         </div>
 
                         <div class="form-group">
