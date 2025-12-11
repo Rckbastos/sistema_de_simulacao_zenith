@@ -532,7 +532,7 @@ const renderInvoicePdf = (res, invoice) => {
     const headerHeight = 24;
     doc.rect(startX, tableTop, pageWidth, headerHeight).fillAndStroke('#f5f5f5', '#000');
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(10);
-    ['Item', 'Cód. Produto', 'Descrição', 'Quantidade', 'Preço Unitário (USD)', 'Valor Total (USD)'].forEach((text, idx) => {
+    ['Item', 'Cód. Produto', 'Descrição', 'Quantidade', 'Preço Unit. (USD)', 'Total (USD)'].forEach((text, idx) => {
       doc.text(text, colX[idx] + 6, tableTop + 8, { width: colWidths[idx] - 12, align: idx === 0 ? 'center' : idx >= 4 ? 'right' : 'left' });
     });
     let rowY = tableTop + headerHeight;
@@ -591,12 +591,12 @@ const renderInvoicePdf = (res, invoice) => {
   }
   doc.moveDown(0.6);
 
-  // Bank details
+  // Bank details - DESENHAR BOX PRIMEIRO
   const bankTop = doc.y;
   const bankPadding = 12;
-  doc.font('Helvetica-Bold').fontSize(9).fillColor('#000').text('INSTRUÇÕES DE PAGAMENTO:', startX + bankPadding, bankTop + bankPadding);
-  doc.font('Helvetica').fontSize(8);
-  const bankFields = [
+
+  // Calcular altura necessária ANTES
+  const bankFieldsData = [
     ['Nome do Banco', invoice.payment.bankName],
     ['Código Swift', invoice.payment.swiftCode],
     ['Agência', invoice.payment.bankBranch],
@@ -607,14 +607,37 @@ const renderInvoicePdf = (res, invoice) => {
     ['Banco Intermediário', invoice.payment.intermediaryBank],
     ['Código Swift Intermediário', invoice.payment.intermediarySwift]
   ].filter(([, v]) => v);
-  let bankCursor = bankTop + bankPadding + 16;
-  bankFields.forEach(([label, val]) => {
-    doc.font('Helvetica-Bold').text(`${label}: `, startX + bankPadding, bankCursor, { continued: true });
+
+  // Estimar altura (título + campos)
+  const estimatedHeight = bankPadding * 2 + 14 + (bankFieldsData.length * 11);
+  const bankHeight = Math.max(90, estimatedHeight);
+
+  // DESENHAR BOX PRIMEIRO (com fundo cinza)
+  doc.rect(startX, bankTop, pageWidth, bankHeight)
+     .fillAndStroke('#f9f9f9', '#ddd');
+
+  // AGORA renderizar conteúdo DENTRO do box
+  doc.fillColor('#000');
+  doc.font('Helvetica-Bold').fontSize(9).text(
+    'INSTRUÇÕES DE PAGAMENTO:',
+    startX + bankPadding,
+    bankTop + bankPadding
+  );
+
+  doc.font('Helvetica').fontSize(8);
+  let bankCursor = bankTop + bankPadding + 14;
+
+  bankFieldsData.forEach(([label, val]) => {
+    doc.font('Helvetica-Bold').text(
+      `${label}: `,
+      startX + bankPadding,
+      bankCursor,
+      { continued: true }
+    );
     doc.font('Helvetica').text(val);
     bankCursor = doc.y;
   });
-  const bankHeight = Math.max(85, bankCursor - bankTop + bankPadding);
-  doc.rect(startX, bankTop, pageWidth, bankHeight).fillAndStroke('#f9f9f9', '#ddd');
+
   doc.strokeColor('#000');
   doc.y = bankTop + bankHeight + 12;
 
