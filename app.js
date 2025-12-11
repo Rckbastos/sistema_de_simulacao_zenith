@@ -224,6 +224,7 @@
     const hoje = new Date();
     const dataIso = hoje.toISOString().slice(0, 10);
     return {
+      language: 'pt',
       clienteId: '',
       clienteNome: '',
       clienteTaxId: '',
@@ -744,6 +745,7 @@
     setValue('invoiceData', form.invoiceDate || getDefaultInvoiceForm().invoiceDate);
     setValue('invoicePaymentTerms', form.paymentTerms || '');
     setValue('invoiceDeliveryTerms', form.deliveryTerms || '');
+    setValue('invoiceLanguage', form.language || 'pt');
     setValue('invoiceObservacoes', form.observacoes || '');
     setValue('invoiceBankName', form.bankName || '');
     setValue('invoiceBankSwift', form.bankSwift || '');
@@ -777,6 +779,7 @@
     form.invoiceNumber = (el('invoiceNumero')?.value || '').trim();
     form.invoiceDate = (el('invoiceData')?.value || form.invoiceDate || getDefaultInvoiceForm().invoiceDate);
     form.moeda = normalizarMoedaLocal(el('invoiceMoeda')?.value || form.moeda || 'USD');
+    form.language = (el('invoiceLanguage')?.value || form.language || 'pt').trim() || 'pt';
     form.paymentTerms = (el('invoicePaymentTerms')?.value || form.paymentTerms || '').trim();
     form.deliveryTerms = (el('invoiceDeliveryTerms')?.value || form.deliveryTerms || '').trim();
     form.observacoes = (el('invoiceObservacoes')?.value || '').trim();
@@ -1102,7 +1105,8 @@
       signatureName: state.user?.nome || 'Zenith Pay',
       extraNotes: form.observacoes ? [form.observacoes] : [],
       amountInWords,
-      moeda: form.moeda
+      moeda: form.moeda,
+      language: form.language || 'pt'
     };
   };
 
