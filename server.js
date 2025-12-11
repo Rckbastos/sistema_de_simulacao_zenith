@@ -551,7 +551,7 @@ const renderInvoicePdf = (res, invoice) => {
       doc.text(formatMoney(item.total), colX[5], rowY + 8, { width: colWidths[5] - 12, align: 'right' });
       rowY += rowHeight;
     });
-    doc.y = rowY + 20;
+    doc.y = rowY + 12;
   }
 
   // Totals
@@ -610,7 +610,7 @@ const renderInvoicePdf = (res, invoice) => {
 
   // Estimar altura (título + campos)
   const estimatedHeight = bankPadding * 2 + 14 + (bankFieldsData.length * 11);
-  const bankHeight = Math.max(90, estimatedHeight);
+  const bankHeight = Math.max(80, estimatedHeight);
 
   // DESENHAR BOX PRIMEIRO (com fundo cinza)
   doc.rect(startX, bankTop, pageWidth, bankHeight)
@@ -639,15 +639,15 @@ const renderInvoicePdf = (res, invoice) => {
   });
 
   doc.strokeColor('#000');
-  doc.y = bankTop + bankHeight + 12;
+  doc.y = bankTop + bankHeight + 10;
 
   // Legal text
   doc.font('Helvetica-Bold').fontSize(8).text('CLÁUSULA ROMALPA:');
   doc.font('Helvetica').fontSize(8).fillColor('#333').text(INVOICE_DEFAULTS.romalpaClause, { lineGap: 1 });
-  doc.moveDown(0.4);
+  doc.moveDown(0.3);
   doc.font('Helvetica-Bold').fillColor('#000').text('DECLARAÇÕES LEGAIS:');
   doc.font('Helvetica').fillColor('#333').text(invoice.acknowledgement || 'Mercadorias recebidas em boas condições. Mercadorias vendidas não são retornáveis.', { lineGap: 1 });
-  doc.moveDown(0.4);
+  doc.moveDown(0.3);
   doc.font('Helvetica-Bold').fillColor('#000').text('TERMOS E CONDIÇÕES:');
   INVOICE_DEFAULTS.terms.forEach(term => {
     doc.font('Helvetica').fillColor('#333').text(`• ${term}`, { lineGap: 1 });
@@ -656,7 +656,7 @@ const renderInvoicePdf = (res, invoice) => {
 
   // Footer signatures
   doc.fillColor('#000');
-  doc.moveDown(1.5);
+  doc.moveDown(1);
   line(startX, doc.y, startX + pageWidth, doc.y, 2);
   doc.moveDown(1.2);
 
@@ -690,7 +690,7 @@ const renderInvoicePdf = (res, invoice) => {
   });
 
   // Linhas de assinatura
-  const sigLineY = sigTop + 45;
+  const sigLineY = sigTop + 42;
   line(leftSigX + 20, sigLineY, leftSigX + sigWidth - 20, sigLineY, 1);
   line(rightSigX + 20, sigLineY, rightSigX + sigWidth - 20, sigLineY, 1);
 
@@ -704,7 +704,7 @@ const renderInvoicePdf = (res, invoice) => {
     align: 'center'
   });
 
-  doc.y = sigLineY + 25;
+  doc.y = sigLineY + 20;
 
   doc.font('Helvetica-Oblique').fontSize(7).fillColor('#666');
   const footerY = Math.min(doc.page.height - doc.page.margins.bottom - 12, doc.y);
