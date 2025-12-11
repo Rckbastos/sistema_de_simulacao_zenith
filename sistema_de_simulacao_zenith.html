@@ -103,6 +103,88 @@
             0% { transform: translateX(0); }
             100% { transform: translateX(-50%); }
         }
+
+        .invoice-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .invoice-block {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 25px;
+        }
+
+        .invoice-items-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .invoice-item-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .invoice-item-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .invoice-summary {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, #1a1a1a 100%);
+            border: 2px solid var(--accent-gold);
+            border-radius: 12px;
+            padding: 25px;
+        }
+
+        .invoice-summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .invoice-summary-row:last-child {
+            border-bottom: none;
+        }
+
+        .invoice-status-message {
+            margin-top: 15px;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .invoice-status-message.success {
+            background: rgba(76, 175, 80, 0.15);
+            color: var(--success);
+            border: 1px solid var(--success);
+        }
+
+        .invoice-status-message.error {
+            background: rgba(244, 67, 54, 0.15);
+            color: var(--danger);
+            border: 1px solid var(--danger);
+        }
+
+        .invoice-instructions {
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(33, 150, 243, 0.08);
+            border: 1px dashed var(--info);
+            border-radius: 10px;
+        }
         
         .container {
             max-width: 1400px;
@@ -904,6 +986,7 @@
                 <button class="tab admin-only" data-tab="comerciais" data-admin-only="true" onclick="switchTab('comerciais', this)">🤝 Comerciais</button>
                 <button class="tab admin-only" data-tab="admin" data-admin-only="true" onclick="switchTab('admin', this)">⚙️ Admin - Serviços</button>
                 <button class="tab admin-only" data-tab="kyc" data-admin-only="true" onclick="switchTab('kyc', this)">🛡️ KYC</button>
+                <button class="tab admin-only" data-tab="invoice" data-admin-only="true" onclick="switchTab('invoice', this)">🧾 Invoice</button>
             </div>
             
             <!-- Dashboard Tab -->
@@ -1370,6 +1453,205 @@
                 <div class="kyc-grid" id="kycLista"></div>
                 <div class="kyc-empty" id="kycEmpty" style="display: none;">
                     Nenhum registro de KYC encontrado.
+                </div>
+            </div>
+
+            <!-- Invoice Tab -->
+            <div id="invoice" class="tab-content">
+                <div class="section-title">🧾 Emissão de Invoice</div>
+                <p class="section-subtitle" style="color: var(--text-secondary); margin-bottom: 15px;">
+                    Esta aba está disponível apenas para administradores. Utilize os dados dos clientes cadastrados para gerar invoices em PDF seguindo o padrão Zenith Pay.
+                </p>
+
+                <div id="invoiceStatusMessage" class="invoice-status-message"></div>
+
+                <div class="invoice-grid">
+                    <div class="invoice-block">
+                        <h3 class="section-title" style="margin-bottom: 20px;">👤 Dados do Cliente</h3>
+
+                        <div class="form-group">
+                            <label class="form-label">Cliente *</label>
+                            <select class="form-select" id="invoiceCliente" onchange="preencherDadosClienteInvoice(this.value)">
+                                <option value="">Selecione um cliente cadastrado</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Razão/Nome</label>
+                            <input type="text" class="form-input" id="invoiceClienteNome" placeholder="Nome da empresa ou pessoa">
+                        </div>
+
+                        <div class="grid-2">
+                            <div class="form-group" style="margin:0;">
+                                <label class="form-label">CPF/CNPJ</label>
+                                <input type="text" class="form-input" id="invoiceClienteTaxId" placeholder="Documento fiscal">
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label class="form-label">Contato</label>
+                                <input type="text" class="form-input" id="invoiceClienteContato" placeholder="Responsável ou telefone">
+                            </div>
+                        </div>
+
+                        <div class="grid-2">
+                            <div class="form-group" style="margin:0;">
+                                <label class="form-label">E-mail</label>
+                                <input type="email" class="form-input" id="invoiceClienteEmail" placeholder="contato@exemplo.com">
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label class="form-label">Telefone</label>
+                                <input type="text" class="form-input" id="invoiceClienteTelefone" placeholder="+55 (11) 99999-0000">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Endereço Completo</label>
+                            <textarea class="form-textarea" id="invoiceClienteEndereco" placeholder="Rua, número, bairro, cidade, país"></textarea>
+                        </div>
+
+                        <h3 class="section-title" style="margin: 25px 0 15px;">📄 Dados da Invoice</h3>
+
+                        <div class="grid-3">
+                            <div class="form-group" style="margin:0;">
+                                <label class="form-label">Nº da Invoice</label>
+                                <input type="text" class="form-input" id="invoiceNumero" placeholder="INV-2025-001">
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label class="form-label">Data</label>
+                                <input type="date" class="form-input" id="invoiceData">
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label class="form-label">Moeda</label>
+                                <select class="form-select" id="invoiceMoeda" onchange="atualizarInvoiceCampo('moeda', this.value)">
+                                    <option value="USD">USD</option>
+                                    <option value="BRL">BRL</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="grid-2">
+                            <div class="form-group" style="margin:0;">
+                                <label class="form-label">Payment Terms</label>
+                                <input type="text" class="form-input" id="invoicePaymentTerms" placeholder="Ex: Prepayment">
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label class="form-label">Delivery Terms</label>
+                                <input type="text" class="form-input" id="invoiceDeliveryTerms" placeholder="Ex: FOB">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Observações e Observância Legal</label>
+                            <textarea class="form-textarea" id="invoiceObservacoes" placeholder="Informações adicionais para o cliente"></textarea>
+                        </div>
+
+                        <h3 class="section-title" style="margin: 25px 0 15px;">🏦 Instruções de Pagamento</h3>
+                        <div class="invoice-instructions">
+                            <div class="form-group">
+                                <label class="form-label">Nome do Banco</label>
+                                <input type="text" class="form-input" id="invoiceBankName" placeholder="Banco responsável pelo recebimento">
+                            </div>
+                            <div class="grid-2">
+                                <div class="form-group" style="margin:0;">
+                                    <label class="form-label">Swift/BIC</label>
+                                    <input type="text" class="form-input" id="invoiceBankSwift" placeholder="Código Swift">
+                                </div>
+                                <div class="form-group" style="margin:0;">
+                                    <label class="form-label">Agência/Branch</label>
+                                    <input type="text" class="form-input" id="invoiceBankBranch" placeholder="Branch ou agência">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Conta/IBAN</label>
+                                <input type="text" class="form-input" id="invoiceBankAccount" placeholder="Número da conta ou IBAN">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Beneficiário</label>
+                                <input type="text" class="form-input" id="invoiceBankBeneficiary" placeholder="ZENITH PAY">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Endereço do Beneficiário</label>
+                                <textarea class="form-textarea" id="invoiceBankBeneficiaryAddress" placeholder="Endereço utilizado na confirmação bancária"></textarea>
+                            </div>
+                            <div class="grid-2">
+                                <div class="form-group" style="margin:0;">
+                                    <label class="form-label">Banco Intermediário</label>
+                                    <input type="text" class="form-input" id="invoiceIntermediaryBank" placeholder="Opcional">
+                                </div>
+                                <div class="form-group" style="margin:0;">
+                                    <label class="form-label">Swift Intermediário</label>
+                                    <input type="text" class="form-input" id="invoiceIntermediarySwift" placeholder="Opcional">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="invoice-block">
+                        <h3 class="section-title" style="margin-bottom: 20px;">📦 Itens e Resumo</h3>
+
+                        <div class="form-group">
+                            <label class="form-label">Itens da Invoice *</label>
+                            <div id="invoiceItensContainer" class="invoice-items-list">
+                                <div class="resumo-item resumo-item-empty" data-empty-invoice>
+                                    Utilize o botão abaixo para adicionar até 3 itens/serviços.
+                                </div>
+                            </div>
+                            <button type="button" class="cotacao-add-btn" style="margin-top: 15px;" onclick="adicionarInvoiceItem()">➕ Adicionar Item</button>
+                        </div>
+
+                        <div class="grid-3" style="margin-top: 10px;">
+                            <div class="form-group" style="margin:0;">
+                                <label class="form-label">Desconto</label>
+                                <input type="number" class="form-input" id="invoiceDesconto" placeholder="0,00" min="0" step="0.01" oninput="atualizarInvoiceCampo('desconto', this.value)">
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label class="form-label">Frete/Taxas</label>
+                                <input type="number" class="form-input" id="invoiceFrete" placeholder="0,00" min="0" step="0.01" oninput="atualizarInvoiceCampo('frete', this.value)">
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label class="form-label">País de Origem</label>
+                                <input type="text" class="form-input" id="invoicePaisOrigem" placeholder="Brasil">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">HS Code / Descrição</label>
+                            <input type="text" class="form-input" id="invoiceHsCode" placeholder="Código HS e descrição resumida">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Detalhes de Entrega</label>
+                            <textarea class="form-textarea" id="invoiceDeliveryInfo" placeholder="Prazo estimado e método de envio"></textarea>
+                        </div>
+
+                        <div class="invoice-summary" style="margin-top: 10px;">
+                            <h4 style="margin-bottom: 10px;">Resumo Financeiro</h4>
+                            <div class="invoice-summary-row">
+                                <span>Subtotal</span>
+                                <strong id="invoiceResumoSubtotal">--</strong>
+                            </div>
+                            <div class="invoice-summary-row">
+                                <span>Desconto</span>
+                                <strong id="invoiceResumoDesconto">--</strong>
+                            </div>
+                            <div class="invoice-summary-row">
+                                <span>Frete / Shipping</span>
+                                <strong id="invoiceResumoFrete">--</strong>
+                            </div>
+                            <div class="invoice-summary-row" style="border-bottom: 2px solid var(--accent-gold);">
+                                <span>Total</span>
+                                <strong id="invoiceResumoTotal">--</strong>
+                            </div>
+                            <div class="invoice-summary-row" style="color: var(--text-secondary); font-style: italic;">
+                                <span>Valor por extenso</span>
+                                <span id="invoiceResumoExtenso">--</span>
+                            </div>
+                        </div>
+
+                        <div class="btn-group" style="margin-top: 20px;">
+                            <button class="btn btn-success" onclick="gerarInvoice()">🧾 Gerar PDF</button>
+                            <button class="btn btn-secondary" onclick="limparInvoiceForm()">🧹 Limpar</button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
