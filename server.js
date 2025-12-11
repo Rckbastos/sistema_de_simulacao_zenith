@@ -1011,6 +1011,19 @@ app.get('/invoices/:number/pdf', authenticate, adminOnly, asyncHandler(async (re
   return renderInvoicePdf(res, payload);
 }));
 
+app.delete('/invoices/:number', authenticate, adminOnly, asyncHandler(async (req, res) => {
+  const { number } = req.params || {};
+  if (!number) {
+    return res.status(400).json({ message: 'Número da invoice é obrigatório.' });
+  }
+
+  const deleted = await prisma.invoiceRecord.deleteMany({ where: { number } });
+  if (deleted.count === 0) {
+    return res.status(404).json({ message: 'Invoice não encontrada.' });
+  }
+  res.status(204).end();
+}));
+
 app.post('/auth/login', asyncHandler(async (req, res) => {
   const { identifier, password } = req.body;
   if (!identifier || !password) {

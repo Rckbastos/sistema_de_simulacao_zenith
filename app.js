@@ -751,7 +751,10 @@
           <td>${data}</td>
           <td>${cliente}</td>
           <td>${totalFmt}</td>
-          <td><button class="action-btn" onclick="baixarInvoicePdf('${numero}')">⬇️ PDF</button></td>
+          <td style="display:flex; gap:6px; justify-content:center;">
+            <button class="action-btn" onclick="baixarInvoicePdf('${numero}')">⬇️ PDF</button>
+            <button class="action-btn action-btn-delete" onclick="deletarInvoice('${numero}')">🗑️ Excluir</button>
+          </td>
         </tr>
       `;
     }).join('');
@@ -790,6 +793,18 @@
       setInvoiceStatus('Download iniciado.', 'success');
     } catch (error) {
       setInvoiceStatus(error.message || 'Erro ao baixar invoice.', 'error');
+    }
+  };
+
+  const deletarInvoice = async (numero) => {
+    if (!numero) return;
+    if (!confirm(`Excluir a invoice ${numero}?`)) return;
+    try {
+      await apiRequest(`/invoices/${encodeURIComponent(numero)}`, { method: 'DELETE' });
+      setInvoiceStatus(`Invoice ${numero} excluída.`, 'success');
+      fetchInvoiceHistorico();
+    } catch (error) {
+      setInvoiceStatus(error.message || 'Erro ao excluir invoice.', 'error');
     }
   };
 
