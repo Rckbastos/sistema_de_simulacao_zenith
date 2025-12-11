@@ -210,11 +210,14 @@
   const gerarInvoiceItemId = () => `inv-item-${Date.now()}-${invoiceItemSeq++}`;
   const novoInvoiceItem = (overrides = {}) => ({
     uid: gerarInvoiceItemId(),
+    tipo: 'product',
     partNumber: '',
     description: '',
     quantity: '',
     unit: 'PCS',
     unitPrice: '',
+    serviceDate: '',
+    reference: '',
     ...overrides
   });
   const getDefaultInvoiceForm = () => {
@@ -934,15 +937,34 @@
             <span>Item ${index + 1}</span>
             <button type="button" class="cotacao-item-remove" ${disabledRemove} onclick="removerInvoiceItem('${item.uid}')">🗑️</button>
           </div>
+          <div class="grid-2" style="margin-top: 5px;">
+            <div class="form-group" style="margin:0;">
+              <label class="form-label">Tipo</label>
+              <select class="form-select" onchange="atualizarInvoiceItemCampo('${item.uid}', 'tipo', this.value)">
+                <option value="product" ${item.tipo === 'product' ? 'selected' : ''}>Produto</option>
+                <option value="service" ${item.tipo === 'service' ? 'selected' : ''}>Serviço</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label class="form-label">Referência</label>
+              <input type="text" class="form-input" value="${escapeHtml(item.reference || '')}" oninput="atualizarInvoiceItemCampo('${item.uid}', 'reference', this.value)">
+            </div>
+          </div>
           <label class="form-label">Part Number</label>
           <input type="text" class="form-input" value="${escapeHtml(item.partNumber || '')}" oninput="atualizarInvoiceItemCampo('${item.uid}', 'partNumber', this.value)">
           <label class="form-label">Descrição</label>
           <textarea class="form-textarea" rows="2" oninput="atualizarInvoiceItemCampo('${item.uid}', 'description', this.value)">${escapeHtml(item.description || '')}</textarea>
-          <div class="grid-3" style="margin-top: 10px;">
+          <div class="grid-2" style="margin-top: 10px;">
+            <div class="form-group" style="margin:0;">
+              <label class="form-label">Data do Serviço</label>
+              <input type="date" class="form-input" value="${item.serviceDate || ''}" oninput="atualizarInvoiceItemCampo('${item.uid}', 'serviceDate', this.value)">
+            </div>
             <div class="form-group" style="margin:0;">
               <label class="form-label">Quantidade</label>
               <input type="number" class="form-input" min="0" step="0.01" value="${qty}" oninput="atualizarInvoiceItemCampo('${item.uid}', 'quantity', this.value)">
             </div>
+          </div>
+          <div class="grid-3" style="margin-top: 10px;">
             <div class="form-group" style="margin:0;">
               <label class="form-label">Unidade</label>
               <input type="text" class="form-input" value="${escapeHtml(item.unit || '')}" oninput="atualizarInvoiceItemCampo('${item.uid}', 'unit', this.value)">
@@ -992,9 +1014,10 @@
     const moeda = form.moeda || 'USD';
     const subtotal = state.invoiceItens.reduce((acc, item) => {
       const qty = toNumber(item.quantity);
+      const effectiveQty = item.tipo === 'service' ? (qty > 0 ? qty : 1) : qty;
       const price = toNumber(item.unitPrice);
-      if (qty <= 0 || price <= 0) return acc;
-      return acc + (qty * price);
+      if (effectiveQty <= 0 || price <= 0) return acc;
+      return acc + (effectiveQty * price);
     }, 0);
     const desconto = Math.min(Math.max(0, toNumber(form.desconto)), subtotal);
     const frete = Math.max(0, toNumber(form.frete));
@@ -1013,13 +1036,16 @@
     const form = coletarInvoiceFormDoDom();
     const itensValidos = state.invoiceItens
       .map(item => ({
+        tipo: item.tipo || 'product',
+        serviceDate: item.serviceDate,
+        reference: item.reference,
         partNumber: (item.partNumber || '').trim(),
         description: (item.description || '').trim(),
         quantity: toNumber(item.quantity),
         unit: (item.unit || 'PCS').trim() || 'PCS',
         unitPrice: toNumber(item.unitPrice)
       }))
-      .filter(item => item.description && item.quantity > 0 && item.unitPrice > 0)
+      .filter(item => item.description && item.unitPrice > 0)
       .slice(0, MAX_INVOICE_ITENS);
     if (!itensValidos.length) {
       throw new Error('Inclua ao menos um item com quantidade e preço.');
@@ -1027,7 +1053,10 @@
     if (!form.clienteNome) {
       throw new Error('Preencha os dados do cliente para a invoice.');
     }
-    const subtotal = itensValidos.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+    const subtotal = itensValidos.reduce((sum, item) => {
+      const qty = item.tipo === 'service' ? (item.quantity > 0 ? item.quantity : 1) : item.quantity;
+      return sum + (qty * item.unitPrice);
+    }, 0);
     const desconto = Math.min(Math.max(0, toNumber(form.desconto)), subtotal);
     const frete = Math.max(0, toNumber(form.frete));
     const total = subtotal - desconto + frete;

@@ -253,11 +253,16 @@ const buildInvoicePayload = payload => {
   };
 
   const items = ensureArray(payload.items).map((item, index) => {
-    const qty = parseAmount(item.quantity);
+    const tipo = sanitizeText(item.tipo || 'product');
+    const qtyRaw = parseAmount(item.quantity);
+    const qty = tipo === 'service' ? (qtyRaw > 0 ? qtyRaw : 1) : qtyRaw;
     const unitPrice = parseAmount(item.unitPrice);
     const total = qty * unitPrice;
     return {
       serial: index + 1,
+      tipo,
+      serviceDate: sanitizeText(item.serviceDate),
+      reference: sanitizeText(item.reference),
       partNumber: sanitizeText(item.partNumber),
       description: sanitizeText(item.description),
       quantity: qty,
@@ -418,63 +423,93 @@ const renderInvoicePdf = (res, invoice) => {
   const infoBottom = Math.max(leftY, infoTop + boxHeight);
   doc.y = infoBottom + 20;
 
-  // Items table
-  const tableTop = doc.y;
-  const colWidths = [50, 120, Math.max(0, pageWidth - (50 + 120 + 80 + 100 + 120)), 80, 100, 120];
-  const colX = [];
-  colWidths.reduce((acc, width, idx) => {
-    colX[idx] = acc;
-    return acc + width;
-  }, startX);
-  const headerHeight = 26;
-  doc.rect(startX, tableTop, pageWidth, headerHeight).fillAndStroke('#f5f5f5', '#000');
-  doc.fillColor('#000').font('Helvetica-Bold').fontSize(10);
-  const headers = ['Item', 'Cód. Produto', 'Descrição', 'Quantidade', 'Preço Unitário (USD)', 'Valor Total (USD)'];
-  headers.forEach((text, idx) => {
-    doc.text(text, colX[idx] + 6, tableTop + 8, { width: colWidths[idx] - 12, align: idx === 0 ? 'center' : idx >= 4 ? 'right' : 'left' });
-  });
+  const serviceItems = (invoice.items || []).filter(it => it.tipo === 'service');
+  const productItems = (invoice.items || []).filter(it => it.tipo !== 'service');
 
-  let rowY = tableTop + headerHeight;
-  invoice.items.forEach(item => {
-    const { title, bullets } = splitDescription(item.description);
-    doc.fontSize(10).font('Helvetica-Bold');
-    const titleHeight = title ? doc.heightOfString(title, { width: colWidths[2] - 12 }) : 0;
-    doc.font('Helvetica').fontSize(9).fillColor('#555');
-    const bulletsHeight = bullets.reduce((acc, bullet) => acc + doc.heightOfString(`• ${bullet}`, { width: colWidths[2] - 12 }), 0);
-    doc.fillColor('#000');
-    const baseHeight = Math.max(30, titleHeight + bulletsHeight + 10);
-
-    // Row borders
-    doc.rect(startX, rowY, pageWidth, baseHeight).stroke();
-    for (let i = 1; i < colWidths.length; i++) {
-      line(colX[i], rowY, colX[i], rowY + baseHeight);
-    }
-
-    // Item number
-    doc.font('Helvetica').fontSize(10).fillColor('#000').text(String(item.serial), colX[0], rowY + 8, { width: colWidths[0], align: 'center' });
-    // Part number
-    doc.text(item.partNumber || '-', colX[1] + 6, rowY + 8, { width: colWidths[1] - 12 });
-    // Description
-    let descY = rowY + 6;
-    if (title) {
-      doc.font('Helvetica-Bold').fontSize(10).text(title, colX[2] + 6, descY, { width: colWidths[2] - 12, lineGap: 2 });
-      descY = doc.y + 2;
-    }
-    doc.font('Helvetica').fontSize(9).fillColor('#555');
-    bullets.forEach(bullet => {
-      doc.text(`• ${bullet}`, colX[2] + 6, descY, { width: colWidths[2] - 12, lineGap: 2 });
-      descY = doc.y + 1;
+  const renderServiceTable = items => {
+    if (!items.length) return;
+    doc.font('Helvetica-Bold').fontSize(11).text('DESCRIÇÃO DE SERVIÇOS', startX, doc.y, { width: pageWidth });
+    doc.moveDown(0.3);
+    const colWidths = [Math.max(0, pageWidth - (100 + 120 + 100)), 100, 120, 100];
+    const colX = [];
+    colWidths.reduce((acc, w, idx) => { colX[idx] = acc; return acc + w; }, startX);
+    const headerHeight = 20;
+    doc.rect(startX, doc.y, pageWidth, headerHeight).fillAndStroke('#f5f5f5', '#000');
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(10);
+    const headers = ['Descrição', 'Data do Serviço', 'Referência', 'Valor (USD)'];
+    headers.forEach((text, idx) => {
+      doc.text(text, colX[idx] + 6, doc.y + 6, { width: colWidths[idx] - 12, align: idx === 3 ? 'right' : 'left' });
     });
-    doc.fillColor('#000');
-    // Quantity
-    doc.font('Helvetica').fontSize(10).text(`${item.quantity} ${item.unit || ''}`.trim(), colX[3], rowY + 8, { width: colWidths[3], align: 'center' });
-    // Unit price / total
-    doc.text(formatMoney(item.unitPrice), colX[4], rowY + 8, { width: colWidths[4] - 6, align: 'right' });
-    doc.text(formatMoney(item.total), colX[5], rowY + 8, { width: colWidths[5] - 6, align: 'right' });
+    let rowY = doc.y + headerHeight;
+    items.forEach(item => {
+      const descHeight = doc.heightOfString(item.description || '-', { width: colWidths[0] - 12, lineGap: 2, font: 'Helvetica', fontSize: 10 });
+      const baseHeight = Math.max(22, descHeight + 8);
+      doc.rect(startX, rowY, pageWidth, baseHeight).stroke();
+      doc.font('Helvetica').fontSize(10).fillColor('#000').text(item.description || '-', colX[0] + 6, rowY + 6, { width: colWidths[0] - 12, lineGap: 2 });
+      doc.text(item.serviceDate || '', colX[1] + 6, rowY + 6, { width: colWidths[1] - 12 });
+      doc.text(item.reference || '', colX[2] + 6, rowY + 6, { width: colWidths[2] - 12 });
+      doc.text(formatMoney(item.total), colX[3] + 6, rowY + 6, { width: colWidths[3] - 12, align: 'right' });
+      rowY += baseHeight;
+    });
+    doc.y = rowY + 12;
+  };
 
-    rowY += baseHeight;
-  });
-  doc.y = rowY + 20;
+  const renderProductTable = items => {
+    if (!items.length) return;
+    const tableTop = doc.y;
+    const colWidths = [50, 120, Math.max(0, pageWidth - (50 + 120 + 80 + 100 + 120)), 80, 100, 120];
+    const colX = [];
+    colWidths.reduce((acc, width, idx) => {
+      colX[idx] = acc;
+      return acc + width;
+    }, startX);
+    const headerHeight = 26;
+    doc.rect(startX, tableTop, pageWidth, headerHeight).fillAndStroke('#f5f5f5', '#000');
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(10);
+    const headers = ['Item', 'Cód. Produto', 'Descrição', 'Quantidade', 'Preço Unitário (USD)', 'Valor Total (USD)'];
+    headers.forEach((text, idx) => {
+      doc.text(text, colX[idx] + 6, tableTop + 8, { width: colWidths[idx] - 12, align: idx === 0 ? 'center' : idx >= 4 ? 'right' : 'left' });
+    });
+
+    let rowY = tableTop + headerHeight;
+    items.forEach(item => {
+      const { title, bullets } = splitDescription(item.description);
+      doc.fontSize(10).font('Helvetica-Bold');
+      const titleHeight = title ? doc.heightOfString(title, { width: colWidths[2] - 12 }) : 0;
+      doc.font('Helvetica').fontSize(9).fillColor('#555');
+      const bulletsHeight = bullets.reduce((acc, bullet) => acc + doc.heightOfString(`• ${bullet}`, { width: colWidths[2] - 12 }), 0);
+      doc.fillColor('#000');
+      const baseHeight = Math.max(30, titleHeight + bulletsHeight + 10);
+
+      doc.rect(startX, rowY, pageWidth, baseHeight).stroke();
+      for (let i = 1; i < colWidths.length; i++) {
+        line(colX[i], rowY, colX[i], rowY + baseHeight);
+      }
+
+      doc.font('Helvetica').fontSize(10).fillColor('#000').text(String(item.serial), colX[0], rowY + 8, { width: colWidths[0], align: 'center' });
+      doc.text(item.partNumber || '-', colX[1] + 6, rowY + 8, { width: colWidths[1] - 12 });
+      let descY = rowY + 6;
+      if (title) {
+        doc.font('Helvetica-Bold').fontSize(10).text(title, colX[2] + 6, descY, { width: colWidths[2] - 12, lineGap: 2 });
+        descY = doc.y + 2;
+      }
+      doc.font('Helvetica').fontSize(9).fillColor('#555');
+      bullets.forEach(bullet => {
+        doc.text(`• ${bullet}`, colX[2] + 6, descY, { width: colWidths[2] - 12, lineGap: 2 });
+        descY = doc.y + 1;
+      });
+      doc.fillColor('#000');
+      doc.font('Helvetica').fontSize(10).text(`${item.quantity} ${item.unit || ''}`.trim(), colX[3], rowY + 8, { width: colWidths[3], align: 'center' });
+      doc.text(formatMoney(item.unitPrice), colX[4], rowY + 8, { width: colWidths[4] - 6, align: 'right' });
+      doc.text(formatMoney(item.total), colX[5], rowY + 8, { width: colWidths[5] - 6, align: 'right' });
+
+      rowY += baseHeight;
+    });
+    doc.y = rowY + 20;
+  };
+
+  renderServiceTable(serviceItems);
+  renderProductTable(productItems);
 
   // Totals section
   const totalsLabelW = 150;
