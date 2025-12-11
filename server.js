@@ -203,6 +203,13 @@ const sanitizeText = (value, fallback = '') => {
   return value.toString().trim();
 };
 
+const truncateText = (text, maxLength, suffix = '...') => {
+  if (!text) return '';
+  const str = text.toString().trim();
+  if (str.length <= maxLength) return str;
+  return str.substring(0, maxLength - suffix.length) + suffix;
+};
+
 const buildClienteDataFromInvoice = (body = {}) => {
   const base = {
     nome: sanitizeText(body.nome || body.customerName, ''),
@@ -238,18 +245,73 @@ const parseAmount = value => {
 
 const ensureArray = value => (Array.isArray(value) ? value : []);
 
+const numberToWordsUSD = (value) => {
+  const num = Math.floor(Number(value) || 0);
+  if (num === 0) return 'ZERO DÓLARES AMERICANOS';
+
+  const units = ['', 'UM', 'DOIS', 'TRÊS', 'QUATRO', 'CINCO', 'SEIS', 'SETE', 'OITO', 'NOVE'];
+  const teens = ['DEZ', 'ONZE', 'DOZE', 'TREZE', 'QUATORZE', 'QUINZE', 'DEZESSEIS', 'DEZESSETE', 'DEZOITO', 'DEZENOVE'];
+  const tens = ['', '', 'VINTE', 'TRINTA', 'QUARENTA', 'CINQUENTA', 'SESSENTA', 'SETENTA', 'OITENTA', 'NOVENTA'];
+  const hundreds = ['', 'CENTO', 'DUZENTOS', 'TREZENTOS', 'QUATROCENTOS', 'QUINHENTOS', 'SEISCENTOS', 'SETECENTOS', 'OITOCENTOS', 'NOVECENTOS'];
+
+  const convertGroup = (n) => {
+    if (n === 0) return '';
+    if (n === 100) return 'CEM';
+    let result = '';
+    const h = Math.floor(n / 100);
+    const t = Math.floor((n % 100) / 10);
+    const u = n % 10;
+    if (h > 0) result += hundreds[h];
+    if (h > 0 && (t > 0 || u > 0)) result += ' E ';
+    if (t === 1) {
+      result += teens[u];
+    } else {
+      if (t > 0) result += tens[t];
+      if (t > 0 && u > 0) result += ' E ';
+      if (u > 0) result += units[u];
+    }
+    return result;
+  };
+
+  const millions = Math.floor(num / 1000000);
+  const thousands = Math.floor((num % 1000000) / 1000);
+  const remainder = num % 1000;
+  let result = '';
+
+  if (millions > 0) {
+    result += convertGroup(millions);
+    result += millions === 1 ? ' MILHÃO' : ' MILHÕES';
+  }
+  if (thousands > 0) {
+    if (result) result += ', ';
+    result += convertGroup(thousands);
+    result += ' MIL';
+  }
+  if (remainder > 0) {
+    if (result) result += (thousands === 0 && millions > 0) ? ' E ' : ', ';
+    result += convertGroup(remainder);
+  }
+
+  result += ' DÓLARES AMERICANOS';
+  const cents = Math.round((value - num) * 100);
+  if (cents > 0) {
+    result += ' E ' + convertGroup(cents) + (cents === 1 ? ' CENTAVO' : ' CENTAVOS');
+  }
+  return result + ' APENAS';
+};
+
 const buildInvoicePayload = payload => {
   const invoiceDate = sanitizeText(payload.invoiceDate, new Date().toISOString().slice(0, 10));
   const invoiceNumber = sanitizeText(payload.invoiceNumber, `INV-${invoiceDate.replace(/-/g, '')}`);
   const customer = {
-    name: sanitizeText(payload.customerName),
-    addressLine1: sanitizeText(payload.customerAddressLine1),
-    addressLine2: sanitizeText(payload.customerAddressLine2),
-    cityState: sanitizeText(payload.customerCityState),
-    country: sanitizeText(payload.customerCountry),
-    taxId: sanitizeText(payload.customerTaxId),
-    email: sanitizeText(payload.customerEmail),
-    phone: sanitizeText(payload.customerPhone)
+    name: truncateText(sanitizeText(payload.customerName), 60),
+    addressLine1: truncateText(sanitizeText(payload.customerAddressLine1), 80),
+    addressLine2: truncateText(sanitizeText(payload.customerAddressLine2), 80),
+    cityState: truncateText(sanitizeText(payload.customerCityState), 60),
+    country: truncateText(sanitizeText(payload.customerCountry), 40),
+    taxId: truncateText(sanitizeText(payload.customerTaxId), 30),
+    email: truncateText(sanitizeText(payload.customerEmail), 50),
+    phone: truncateText(sanitizeText(payload.customerPhone), 30)
   };
 
   const items = ensureArray(payload.items).map((item, index) => {
@@ -262,11 +324,11 @@ const buildInvoicePayload = payload => {
       serial: index + 1,
       tipo,
       serviceDate: sanitizeText(item.serviceDate),
-      reference: sanitizeText(item.reference),
-      partNumber: sanitizeText(item.partNumber),
-      description: sanitizeText(item.description),
+      reference: truncateText(sanitizeText(item.reference), 20),
+      partNumber: truncateText(sanitizeText(item.partNumber), 25),
+      description: truncateText(sanitizeText(item.description), 200),
       quantity: qty,
-      unit: sanitizeText(item.unit || 'PCS'),
+      unit: truncateText(sanitizeText(item.unit || 'PCS'), 10),
       unitPrice,
       total
     };
@@ -292,11 +354,11 @@ const buildInvoicePayload = payload => {
     },
     customer,
     invoice: {
-      number: invoiceNumber,
+      number: truncateText(invoiceNumber, 30),
       date: invoiceDate,
-      customerNumber: sanitizeText(payload.customerNumber),
-      paymentTerms: sanitizeText(payload.paymentTerms, 'Prepayment'),
-      deliveryTerms: sanitizeText(payload.deliveryTerms, 'FOB')
+      customerNumber: truncateText(sanitizeText(payload.customerNumber), 25),
+      paymentTerms: truncateText(sanitizeText(payload.paymentTerms, 'Prepayment'), 30),
+      deliveryTerms: truncateText(sanitizeText(payload.deliveryTerms, 'FOB'), 20)
     },
     logistic: {
       countryOfOrigin: sanitizeText(payload.countryOfOrigin),
@@ -329,7 +391,8 @@ const buildInvoicePayload = payload => {
         discount: toCurrency(discount),
         shipping: toCurrency(shipping),
         total: toCurrency(total)
-      }
+      },
+      amountInWords: numberToWordsUSD(total)
     }
   };
 };
@@ -372,7 +435,7 @@ const renderInvoicePdf = (res, invoice) => {
   // Info container
   const infoTop = doc.y;
   const gap = 20;
-  const leftWidth = (pageWidth - gap) * 0.55;
+  const leftWidth = (pageWidth - gap) * 0.52;
   const rightWidth = pageWidth - gap - leftWidth;
 
   doc.font('Helvetica-Bold').fontSize(11).fillColor('#000').text('DESTINATÁRIO', startX, infoTop, { width: leftWidth });
@@ -394,8 +457,8 @@ const renderInvoicePdf = (res, invoice) => {
 
   // Details box
   const boxX = startX + leftWidth + gap;
-  const boxPad = 15;
-  const labelW = 120;
+  const boxPad = 12;
+  const labelW = 110;
   const boxTop = infoTop;
   const detailFields = [
     ['Fatura Nº', invoice.invoice.number],
@@ -404,18 +467,34 @@ const renderInvoicePdf = (res, invoice) => {
     ['Condições de Pagamento', invoice.invoice.paymentTerms],
     ['Termos de Entrega', invoice.invoice.deliveryTerms]
   ];
-  doc.font('Helvetica').fontSize(10);
-  const lineHeight = doc.heightOfString('X', { width: rightWidth - boxPad * 2 });
-  const boxHeight = Math.max(130, boxPad * 2 + detailFields.length * (lineHeight + 4));
-  doc.rect(boxX, boxTop, rightWidth, boxHeight).lineWidth(2).stroke();
-  let cursorY = boxTop + boxPad;
+
+  let totalHeight = boxPad * 2;
+  const fieldHeights = [];
+
   detailFields.forEach(([label, value]) => {
-    doc.font('Helvetica-Bold').text(label, boxX + boxPad, cursorY, { width: labelW });
-    doc.font('Helvetica').text(value || '-', boxX + boxPad + labelW + 6, cursorY, {
-      width: rightWidth - boxPad * 2 - labelW - 6,
+    const valueWidth = rightWidth - boxPad * 2 - labelW - 6;
+    const valueHeight = doc.heightOfString(value || '-', {
+      width: valueWidth,
       align: 'right'
     });
-    cursorY += lineHeight + 6;
+    const fieldHeight = Math.max(16, valueHeight + 4);
+    fieldHeights.push(fieldHeight);
+    totalHeight += fieldHeight + 2;
+  });
+
+  const boxHeight = Math.max(130, totalHeight);
+  doc.rect(boxX, boxTop, rightWidth, boxHeight).lineWidth(2).stroke();
+
+  let cursorY = boxTop + boxPad;
+  detailFields.forEach(([label, value], index) => {
+    const valueWidth = rightWidth - boxPad * 2 - labelW - 6;
+    doc.font('Helvetica-Bold').fontSize(9).text(label, boxX + boxPad, cursorY, { width: labelW });
+    doc.font('Helvetica').fontSize(9).text(value || '-', boxX + boxPad + labelW + 6, cursorY, {
+      width: valueWidth,
+      align: 'right',
+      lineGap: 1
+    });
+    cursorY += fieldHeights[index] + 2;
   });
 
   doc.y = Math.max(leftBottom, boxTop + boxHeight) + 30;
@@ -424,7 +503,7 @@ const renderInvoicePdf = (res, invoice) => {
   const items = invoice.items || [];
   if (items.length) {
     const tableTop = doc.y;
-    const colWidths = [50, 120, pageWidth - (50 + 120 + 80 + 100 + 120), 80, 100, 120];
+    const colWidths = [40, 90, pageWidth - (40 + 90 + 70 + 100 + 100), 70, 100, 100];
     const colX = [];
     colWidths.reduce((acc, w, i) => { colX[i] = acc; return acc + w; }, startX);
     const headerHeight = 28;
@@ -470,7 +549,7 @@ const renderInvoicePdf = (res, invoice) => {
   doc.text(formatMoney(invoice.totals.total), totalsStartX + totalsLabelW, grandStartY + 6, { width: totalsValueW, align: 'right' });
   line(totalsStartX, grandStartY + 26, startX + pageWidth, grandStartY + 26, 3);
   doc.y = grandStartY + 36;
-  doc.font('Helvetica').fontSize(10).font('Helvetica-Oblique').text(`(DIGA-SE ${toUpperSafe(invoice.amountInWords || '')})`, startX, doc.y, { width: pageWidth, align: 'right' });
+  doc.font('Helvetica').fontSize(10).font('Helvetica-Oblique').text(`(DIGA-SE ${invoice.totals?.amountInWords || 'VALOR NÃO ESPECIFICADO'})`, startX, doc.y, { width: pageWidth, align: 'right' });
   doc.moveDown(2);
 
   // Additional info
