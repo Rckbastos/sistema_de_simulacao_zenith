@@ -349,15 +349,7 @@ const renderInvoicePdf = (res, invoice) => {
     const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     return `USD $ ${intPart},${parts[1]}`;
   };
-
   const toUpperSafe = value => (value || '').toString().toUpperCase();
-  const splitDescription = desc => {
-    const lines = (desc || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-    if (!lines.length) return { title: '', bullets: [] };
-    const [title, ...rest] = lines;
-    return { title, bullets: rest };
-  };
-
   const line = (x1, y1, x2, y2, width = 1, color = '#000') => {
     doc.save();
     doc.lineWidth(width).strokeColor(color).moveTo(x1, y1).lineTo(x2, y2).stroke();
@@ -367,102 +359,81 @@ const renderInvoicePdf = (res, invoice) => {
   // Header
   doc.font('Helvetica-Bold').fontSize(24).text(invoice.company.name || 'ZENITH PAY', startX, doc.y, { align: 'center', width: pageWidth });
   doc.moveDown(0.3);
-  doc.font('Helvetica').fontSize(9).fillColor('#333');
-  doc.text(invoice.company.addressLine1 || '', { align: 'center', width: pageWidth, lineGap: 2 });
-  doc.text(invoice.company.addressLine2 || '', { align: 'center', width: pageWidth, lineGap: 2 });
-  doc.text(`${invoice.company.phone} | ${invoice.company.fax} | ${invoice.company.email}`, { align: 'center', width: pageWidth, lineGap: 2 });
-  doc.text(`${invoice.company.website} | ${invoice.company.taxId}`, { align: 'center', width: pageWidth, lineGap: 2 });
+  doc.font('Helvetica').fontSize(8).fillColor('#333');
+  [
+    invoice.company.addressLine1 || '',
+    invoice.company.addressLine2 || '',
+    `${invoice.company.phone} | ${invoice.company.email || ''}`,
+    `${invoice.company.website} | ${invoice.company.taxId}`
+  ].forEach(lineText => {
+    if (lineText.trim()) {
+      doc.text(lineText, { align: 'center', width: pageWidth, lineGap: 2 });
+    }
+  });
   const headerBottom = doc.y + 12;
   line(startX, headerBottom, startX + pageWidth, headerBottom, 3, '#D4AF37');
-  doc.moveDown(1.5);
-  doc.fillColor('#000');
+  doc.moveDown(1.5).fillColor('#000').fontSize(11);
 
-  // Recipient + Invoice details
-  const infoTop = doc.y + 5;
+  // Invoice info container
   const gap = 20;
-  const leftWidth = (pageWidth - gap) * 0.55;
-  const rightWidth = Math.max(250, pageWidth - gap - leftWidth);
-  const rightX = startX + leftWidth + gap;
+  const leftWidth = (pageWidth - gap) * 0.6;
+  const rightWidth = pageWidth - gap - leftWidth;
+  const infoTop = doc.y;
 
   // Recipient
-  doc.font('Helvetica-Bold').fontSize(11).text('DESTINATÁRIO', startX, infoTop, { width: leftWidth, lineGap: 4 });
-  let leftY = doc.y + 4;
-  doc.font('Helvetica-Bold').fontSize(10).text(invoice.customer.name || '-', startX, leftY, { width: leftWidth, lineGap: 3 });
-  leftY = doc.y;
-  doc.font('Helvetica').fontSize(10).text(invoice.customer.addressLine1 || '', startX, leftY, { width: leftWidth, lineGap: 3 });
-  doc.text(invoice.customer.addressLine2 || '', { width: leftWidth, lineGap: 3 });
-  doc.text(invoice.customer.cityState || '', { width: leftWidth, lineGap: 3 });
-  doc.text(invoice.customer.country || '', { width: leftWidth, lineGap: 3 });
-  doc.text(`CNPJ / Tax ID: ${invoice.customer.taxId || '-'}`, { width: leftWidth, lineGap: 3 });
-  doc.text(`Email: ${invoice.customer.email || '-'}`, { width: leftWidth, lineGap: 3 });
-  doc.text(`Telefone: ${invoice.customer.phone || '-'}`, { width: leftWidth, lineGap: 3 });
-  leftY = doc.y;
+  doc.font('Helvetica-Bold').text('DESTINATÁRIO', startX, infoTop, { width: leftWidth });
+  doc.moveDown(0.4);
+  doc.font('Helvetica').fontSize(10);
+  const recipientLines = [
+    invoice.customer.name || '-',
+    invoice.customer.addressLine1 || '',
+    invoice.customer.addressLine2 || '',
+    invoice.customer.cityState || '',
+    invoice.customer.country || '',
+    `CNPJ / Tax ID: ${invoice.customer.taxId || '-'}`,
+    `Email: ${invoice.customer.email || '-'}`,
+    `Telefone: ${invoice.customer.phone || '-'}`,
+    invoice.customer.contact ? `Contato: ${invoice.customer.contact}` : ''
+  ].filter(Boolean);
+  recipientLines.forEach(text => {
+    doc.text(text, { width: leftWidth, lineGap: 2 });
+  });
+  const leftBottom = doc.y;
 
-  // Invoice details box
+  // Invoice box
+  const boxX = startX + leftWidth + gap;
   const boxPadding = 12;
-  const boxLabelWidth = 120;
-  let boxCurrentY = infoTop + 6;
-  const detailFields = [
+  const boxLabelWidth = 140;
+  let boxY = infoTop;
+  let cursorY = boxY + boxPadding;
+  const details = [
     ['Fatura Nº', invoice.invoice.number],
     ['Data', invoice.invoice.date],
-    ['Cliente Nº', invoice.invoice.customerNumber || ''],
+    ['Cliente Nº', invoice.invoice.customerNumber || '-'],
     ['Condições de Pagamento', invoice.invoice.paymentTerms],
     ['Termos de Entrega', invoice.invoice.deliveryTerms]
   ];
-  const boxInnerX = rightX + boxPadding;
-  boxCurrentY += boxPadding;
   doc.font('Helvetica').fontSize(10);
-  detailFields.forEach(([label, value]) => {
-    doc.font('Helvetica-Bold').text(`${label}:`, boxInnerX, boxCurrentY, { width: boxLabelWidth });
-    doc.font('Helvetica').text(value || '-', boxInnerX + boxLabelWidth, boxCurrentY, { width: rightWidth - boxPadding * 2 - boxLabelWidth, align: 'right' });
-    boxCurrentY += 16;
+  details.forEach(([label, value]) => {
+    doc.font('Helvetica-Bold').text(label, boxX + boxPadding, cursorY, { width: boxLabelWidth });
+    doc.font('Helvetica').text(value || '-', boxX + boxPadding + boxLabelWidth + 6, cursorY, {
+      width: rightWidth - boxPadding * 2 - boxLabelWidth - 6,
+      align: 'right'
+    });
+    cursorY += 16;
   });
-  const boxHeight = boxCurrentY - infoTop + boxPadding;
-  doc.rect(rightX, infoTop, rightWidth, boxHeight).lineWidth(2).stroke();
+  const boxHeight = cursorY - boxY + boxPadding;
+  doc.rect(boxX, boxY, rightWidth, boxHeight).lineWidth(2).stroke();
 
-  const infoBottom = Math.max(leftY, infoTop + boxHeight);
-  doc.y = infoBottom + 20;
+  doc.y = Math.max(leftBottom, boxY + boxHeight) + 24;
 
-  const serviceItems = (invoice.items || []).filter(it => it.tipo === 'service');
-  const productItems = (invoice.items || []).filter(it => it.tipo !== 'service');
-
-  const renderServiceTable = items => {
-    if (!items.length) return;
-    doc.font('Helvetica-Bold').fontSize(11).text('DESCRIÇÃO DE SERVIÇOS', startX, doc.y, { width: pageWidth });
-    doc.moveDown(0.3);
-    const colWidths = [Math.max(0, pageWidth - (100 + 120 + 100)), 100, 120, 100];
-    const colX = [];
-    colWidths.reduce((acc, w, idx) => { colX[idx] = acc; return acc + w; }, startX);
-    const headerHeight = 20;
-    doc.rect(startX, doc.y, pageWidth, headerHeight).fillAndStroke('#f5f5f5', '#000');
-    doc.fillColor('#000').font('Helvetica-Bold').fontSize(10);
-    const headers = ['Descrição', 'Data do Serviço', 'Referência', 'Valor (USD)'];
-    headers.forEach((text, idx) => {
-      doc.text(text, colX[idx] + 6, doc.y + 6, { width: colWidths[idx] - 12, align: idx === 3 ? 'right' : 'left' });
-    });
-    let rowY = doc.y + headerHeight;
-    items.forEach(item => {
-      const descHeight = doc.heightOfString(item.description || '-', { width: colWidths[0] - 12, lineGap: 2, font: 'Helvetica', fontSize: 10 });
-      const baseHeight = Math.max(22, descHeight + 8);
-      doc.rect(startX, rowY, pageWidth, baseHeight).stroke();
-      doc.font('Helvetica').fontSize(10).fillColor('#000').text(item.description || '-', colX[0] + 6, rowY + 6, { width: colWidths[0] - 12, lineGap: 2 });
-      doc.text(item.serviceDate || '', colX[1] + 6, rowY + 6, { width: colWidths[1] - 12 });
-      doc.text(item.reference || '', colX[2] + 6, rowY + 6, { width: colWidths[2] - 12 });
-      doc.text(formatMoney(item.total), colX[3] + 6, rowY + 6, { width: colWidths[3] - 12, align: 'right' });
-      rowY += baseHeight;
-    });
-    doc.y = rowY + 12;
-  };
-
-  const renderProductTable = items => {
-    if (!items.length) return;
+  // Items table (single layout)
+  const items = invoice.items || [];
+  if (items.length) {
     const tableTop = doc.y;
-    const colWidths = [50, 120, Math.max(0, pageWidth - (50 + 120 + 80 + 100 + 120)), 80, 100, 120];
+    const colWidths = [40, 100, Math.max(200, pageWidth - (40 + 100 + 90 + 110 + 120)), 90, 110, 120];
     const colX = [];
-    colWidths.reduce((acc, width, idx) => {
-      colX[idx] = acc;
-      return acc + width;
-    }, startX);
+    colWidths.reduce((acc, w, i) => { colX[i] = acc; return acc + w; }, startX);
     const headerHeight = 26;
     doc.rect(startX, tableTop, pageWidth, headerHeight).fillAndStroke('#f5f5f5', '#000');
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(10);
@@ -470,90 +441,69 @@ const renderInvoicePdf = (res, invoice) => {
     headers.forEach((text, idx) => {
       doc.text(text, colX[idx] + 6, tableTop + 8, { width: colWidths[idx] - 12, align: idx === 0 ? 'center' : idx >= 4 ? 'right' : 'left' });
     });
-
     let rowY = tableTop + headerHeight;
     items.forEach(item => {
-      const { title, bullets } = splitDescription(item.description);
-      doc.fontSize(10).font('Helvetica-Bold');
-      const titleHeight = title ? doc.heightOfString(title, { width: colWidths[2] - 12 }) : 0;
-      doc.font('Helvetica').fontSize(9).fillColor('#555');
-      const bulletsHeight = bullets.reduce((acc, bullet) => acc + doc.heightOfString(`• ${bullet}`, { width: colWidths[2] - 12 }), 0);
-      doc.fillColor('#000');
-      const baseHeight = Math.max(30, titleHeight + bulletsHeight + 10);
-
+      const desc = item.description || '-';
+      const descHeight = doc.heightOfString(desc, { width: colWidths[2] - 12, lineGap: 2, align: 'left' });
+      const baseHeight = Math.max(28, descHeight + 10);
       doc.rect(startX, rowY, pageWidth, baseHeight).stroke();
       for (let i = 1; i < colWidths.length; i++) {
         line(colX[i], rowY, colX[i], rowY + baseHeight);
       }
-
-      doc.font('Helvetica').fontSize(10).fillColor('#000').text(String(item.serial), colX[0], rowY + 8, { width: colWidths[0], align: 'center' });
+      doc.font('Helvetica').fontSize(10).fillColor('#000');
+      doc.text(String(item.serial), colX[0], rowY + 8, { width: colWidths[0], align: 'center' });
       doc.text(item.partNumber || '-', colX[1] + 6, rowY + 8, { width: colWidths[1] - 12 });
-      let descY = rowY + 6;
-      if (title) {
-        doc.font('Helvetica-Bold').fontSize(10).text(title, colX[2] + 6, descY, { width: colWidths[2] - 12, lineGap: 2 });
-        descY = doc.y + 2;
-      }
-      doc.font('Helvetica').fontSize(9).fillColor('#555');
-      bullets.forEach(bullet => {
-        doc.text(`• ${bullet}`, colX[2] + 6, descY, { width: colWidths[2] - 12, lineGap: 2 });
-        descY = doc.y + 1;
-      });
-      doc.fillColor('#000');
-      doc.font('Helvetica').fontSize(10).text(`${item.quantity} ${item.unit || ''}`.trim(), colX[3], rowY + 8, { width: colWidths[3], align: 'center' });
-      doc.text(formatMoney(item.unitPrice), colX[4], rowY + 8, { width: colWidths[4] - 6, align: 'right' });
-      doc.text(formatMoney(item.total), colX[5], rowY + 8, { width: colWidths[5] - 6, align: 'right' });
-
+      doc.text(desc, colX[2] + 6, rowY + 6, { width: colWidths[2] - 12, lineGap: 2 });
+      doc.text(`${item.quantity} ${item.unit || ''}`.trim(), colX[3], rowY + 8, { width: colWidths[3], align: 'center' });
+      doc.text(formatMoney(item.unitPrice), colX[4], rowY + 8, { width: colWidths[4] - 12, align: 'right' });
+      doc.text(formatMoney(item.total), colX[5], rowY + 8, { width: colWidths[5] - 12, align: 'right' });
       rowY += baseHeight;
     });
     doc.y = rowY + 20;
-  };
+  }
 
-  renderServiceTable(serviceItems);
-  renderProductTable(productItems);
-
-  // Totals section
+  // Totals
   const totalsLabelW = 150;
   const totalsValueW = 150;
   const totalsStartX = startX + pageWidth - (totalsLabelW + totalsValueW);
-  const totalLines = [
-    ['Subtotal', invoice.totals.subtotal],
-    ['Desconto', invoice.totals.discount],
-    ['Frete', invoice.totals.shipping]
-  ];
   doc.font('Helvetica').fontSize(11);
-  totalLines.forEach(([label, val]) => {
+  [['Subtotal', invoice.totals.subtotal], ['Desconto', invoice.totals.discount], ['Frete', invoice.totals.shipping]].forEach(([label, val]) => {
     doc.text(label, totalsStartX, doc.y, { width: totalsLabelW, align: 'right' });
     doc.font('Helvetica-Bold').text(formatMoney(val), totalsStartX + totalsLabelW, doc.y, { width: totalsValueW, align: 'right' });
     doc.moveDown(0.4);
     doc.font('Helvetica');
   });
-  const grandY = doc.y + 6;
-  line(totalsStartX, grandY, startX + pageWidth, grandY, 2);
-  doc.font('Helvetica-Bold').fontSize(13).text('TOTAL', totalsStartX, grandY + 6, { width: totalsLabelW, align: 'right' });
-  doc.text(formatMoney(invoice.totals.total), totalsStartX + totalsLabelW, grandY + 6, { width: totalsValueW, align: 'right' });
-  line(totalsStartX, grandY + 28, startX + pageWidth, grandY + 28, 3);
-  doc.y = grandY + 40;
+  doc.font('Helvetica-Bold').fontSize(13);
+  const grandStartY = doc.y + 4;
+  line(totalsStartX, grandStartY, startX + pageWidth, grandStartY, 2);
+  doc.text('TOTAL:', totalsStartX, grandStartY + 6, { width: totalsLabelW, align: 'right' });
+  doc.text(formatMoney(invoice.totals.total), totalsStartX + totalsLabelW, grandStartY + 6, { width: totalsValueW, align: 'right' });
+  line(totalsStartX, grandStartY + 26, startX + pageWidth, grandStartY + 26, 3);
+  doc.y = grandStartY + 36;
   doc.font('Helvetica').fontSize(10).font('Helvetica-Oblique').text(`(DIGA-SE ${toUpperSafe(invoice.amountInWords || '')})`, startX, doc.y, { width: pageWidth, align: 'right' });
   doc.moveDown(2);
 
   // Additional info
-  const infoBlocks = [
-    ['PAÍS DE ORIGEM', invoice.logistic.countryOfOrigin || '-'],
-    ['CÓDIGO HS', invoice.logistic.hsCode || '-'],
-    ['INFORMAÇÕES DE ENTREGA', `${invoice.logistic.deliveryInfo || ''}${invoice.logistic.shippingMethod ? `\nMétodo de Envio: ${invoice.logistic.shippingMethod}` : ''}`.trim()]
-  ];
-  doc.font('Helvetica').fontSize(10);
-  infoBlocks.forEach(([title, content]) => {
-    doc.font('Helvetica-Bold').text(title, { width: pageWidth });
-    doc.font('Helvetica').text(content || '-', { width: pageWidth, lineGap: 2 });
-    doc.moveDown(0.8);
-  });
+  doc.font('Helvetica-Bold').fontSize(10).text('PAÍS DE ORIGEM:', startX, doc.y, { width: pageWidth });
+  doc.font('Helvetica').fontSize(10).text(invoice.logistic.countryOfOrigin || '-', { width: pageWidth, lineGap: 2 });
+  doc.moveDown(0.6);
+  doc.font('Helvetica-Bold').text('CÓDIGO HS:', startX, doc.y, { width: pageWidth });
+  doc.font('Helvetica').text(invoice.logistic.hsCode || '-', { width: pageWidth, lineGap: 2 });
+  doc.moveDown(0.6);
+  doc.font('Helvetica-Bold').text('INFORMAÇÕES DE ENTREGA:', startX, doc.y, { width: pageWidth });
+  doc.font('Helvetica').text(invoice.logistic.deliveryInfo || '-', { width: pageWidth, lineGap: 2 });
+  if (invoice.logistic.shippingMethod) {
+    doc.text(`Método de Envio: ${invoice.logistic.shippingMethod}`, { width: pageWidth, lineGap: 2 });
+  }
+  doc.moveDown(1);
 
   // Bank details
-  const bankBoxY = doc.y + 4;
+  const bankY = doc.y;
   const bankPadding = 12;
-  const bankContentY = bankBoxY + bankPadding;
-  const bankLines = [
+  doc.rect(startX, bankY, pageWidth, 0).fillAndStroke('#f9f9f9', '#ddd'); // background placeholder
+  doc.font('Helvetica-Bold').fontSize(10).fillColor('#000').text('INSTRUÇÕES DE PAGAMENTO:', startX + bankPadding, bankY + bankPadding);
+  doc.font('Helvetica').fontSize(9);
+  const bankFields = [
     ['Nome do Banco', invoice.payment.bankName],
     ['Código Swift', invoice.payment.swiftCode],
     ['Agência', invoice.payment.bankBranch],
@@ -563,36 +513,26 @@ const renderInvoicePdf = (res, invoice) => {
     ['Endereço do Beneficiário', invoice.payment.beneficiaryAddress],
     ['Banco Intermediário', invoice.payment.intermediaryBank],
     ['Código Swift Intermediário', invoice.payment.intermediarySwift]
-  ].filter(([, val]) => val);
-  let bankHeight = bankPadding + 14;
-  doc.font('Helvetica').fontSize(9);
-  bankLines.forEach(([label, val]) => {
-    const textHeight = doc.heightOfString(`${label}: ${val}`, { width: pageWidth - bankPadding * 2 });
-    bankHeight += textHeight;
-  });
-  bankHeight = Math.max(80, bankHeight + bankPadding);
-  doc.save();
-  doc.rect(startX, bankBoxY, pageWidth, bankHeight).fillAndStroke('#f9f9f9', '#ddd');
-  doc.restore();
-  doc.font('Helvetica-Bold').fontSize(10).fillColor('#000').text('INSTRUÇÕES DE PAGAMENTO:', startX + bankPadding, bankContentY);
-  doc.font('Helvetica').fontSize(9).fillColor('#000');
-  let bankY = bankContentY + 14;
-  bankLines.forEach(([label, val]) => {
-    doc.font('Helvetica-Bold').text(`${label}: `, startX + bankPadding, bankY, { continued: true });
+  ].filter(([, v]) => v);
+  let bankCursor = bankY + bankPadding + 14;
+  bankFields.forEach(([label, val]) => {
+    doc.font('Helvetica-Bold').text(`${label}: `, startX + bankPadding, bankCursor, { continued: true });
     doc.font('Helvetica').text(val);
-    bankY = doc.y;
+    bankCursor = doc.y;
   });
+  const bankHeight = Math.max(80, bankCursor - bankY + bankPadding);
+  doc.rect(startX, bankY, pageWidth, bankHeight).strokeColor('#ddd').stroke();
   doc.strokeColor('#000');
-  doc.y = bankBoxY + bankHeight + 16;
+  doc.y = bankY + bankHeight + 16;
 
   // Legal text
-  doc.font('Helvetica-Bold').fontSize(9).text('CLÁUSULA ROMALPA');
+  doc.font('Helvetica-Bold').fontSize(9).text('CLÁUSULA ROMALPA:');
   doc.font('Helvetica').fontSize(9).fillColor('#333').text(INVOICE_DEFAULTS.romalpaClause, { lineGap: 2 });
   doc.moveDown(0.6);
-  doc.font('Helvetica-Bold').fillColor('#000').text('DECLARAÇÕES LEGAIS');
+  doc.font('Helvetica-Bold').fillColor('#000').text('DECLARAÇÕES LEGAIS:');
   doc.font('Helvetica').fillColor('#333').text(invoice.acknowledgement || 'Mercadorias recebidas em boas condições. Mercadorias vendidas não são retornáveis.', { lineGap: 2 });
   doc.moveDown(0.6);
-  doc.font('Helvetica-Bold').fillColor('#000').text('TERMOS E CONDIÇÕES');
+  doc.font('Helvetica-Bold').fillColor('#000').text('TERMOS E CONDIÇÕES:');
   INVOICE_DEFAULTS.terms.forEach(term => {
     doc.font('Helvetica').fillColor('#333').text(`• ${term}`, { lineGap: 2 });
   });
@@ -603,17 +543,16 @@ const renderInvoicePdf = (res, invoice) => {
   line(startX, doc.y, startX + pageWidth, doc.y, 2);
   doc.moveDown(2);
   const sigTop = doc.y;
-  const sigWidth = (pageWidth - 40) / 2;
-  const sigGap = 40;
+  const sigWidth = 220;
+  const sigGap = pageWidth - sigWidth * 2;
   const leftSigX = startX;
   const rightSigX = startX + sigWidth + sigGap;
-
   doc.font('Helvetica').fontSize(9).text('Mercadorias recebidas em boas condições\nMercadorias vendidas não são retornáveis', leftSigX, sigTop, { width: sigWidth, align: 'center', lineGap: 2 });
-  doc.font('Helvetica').fontSize(9).text('Em Nome de\nZenith Pay', rightSigX, sigTop, { width: sigWidth, align: 'center', lineGap: 2 });
+  doc.text('Em Nome de\nZenith Pay', rightSigX, sigTop, { width: sigWidth, align: 'center', lineGap: 2 });
   const sigLineY = sigTop + 70;
-  line(leftSigX + 20, sigLineY, leftSigX + sigWidth - 20, sigLineY);
-  line(rightSigX + 20, sigLineY, rightSigX + sigWidth - 20, sigLineY);
-  doc.font('Helvetica').fontSize(9).text('Carimbo e Assinatura', leftSigX, sigLineY + 6, { width: sigWidth, align: 'center' });
+  line(leftSigX + 10, sigLineY, leftSigX + sigWidth - 10, sigLineY);
+  line(rightSigX + 10, sigLineY, rightSigX + sigWidth - 10, sigLineY);
+  doc.text('Carimbo e Assinatura', leftSigX, sigLineY + 6, { width: sigWidth, align: 'center' });
   doc.text('Assinatura Autorizada', rightSigX, sigLineY + 6, { width: sigWidth, align: 'center' });
   doc.y = sigLineY + 40;
 
