@@ -966,6 +966,51 @@ app.post('/invoices/generate', authenticate, adminOnly, asyncHandler(async (req,
   return renderInvoicePdf(res, payload);
 }));
 
+app.get('/invoices', authenticate, adminOnly, asyncHandler(async (req, res) => {
+  const records = await prisma.invoiceRecord.findMany({
+    orderBy: { createdAt: 'desc' }
+  });
+
+  const data = records.map(rec => {
+    const payload = rec.payload && rec.payload !== Prisma.JsonNull ? rec.payload : {};
+    const customerName = payload?.customer?.name || payload?.customerName || '';
+    const invoiceDate = payload?.invoice?.date || rec.createdAt?.toISOString()?.slice(0, 10) || null;
+    const total = payload?.totals?.total || 0;
+    const currency = payload?.moeda || 'USD';
+    return {
+      number: rec.number,
+      invoiceDate,
+      createdAt: rec.createdAt,
+      customerName,
+      total,
+      currency
+    };
+  });
+
+  res.json(data);
+}));
+
+app.get('/invoices/:number/pdf', authenticate, adminOnly, asyncHandler(async (req, res) => {
+  const { number } = req.params || {};
+  if (!number) {
+    return res.status(400).json({ message: 'Número da invoice é obrigatório.' });
+  }
+
+  const record = await prisma.invoiceRecord.findUnique({
+    where: { number }
+  });
+  if (!record) {
+    return res.status(404).json({ message: 'Invoice não encontrada.' });
+  }
+
+  const payload = record.payload && record.payload !== Prisma.JsonNull ? record.payload : null;
+  if (!payload || !payload.invoice || !payload.items) {
+    return res.status(400).json({ message: 'Invoice registrada sem payload para gerar PDF.' });
+  }
+
+  return renderInvoicePdf(res, payload);
+}));
+
 app.post('/auth/login', asyncHandler(async (req, res) => {
   const { identifier, password } = req.body;
   if (!identifier || !password) {
