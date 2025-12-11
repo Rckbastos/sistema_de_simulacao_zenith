@@ -359,29 +359,23 @@ const renderInvoicePdf = (res, invoice) => {
   // Header
   doc.font('Helvetica-Bold').fontSize(24).text(invoice.company.name || 'ZENITH PAY', startX, doc.y, { align: 'center', width: pageWidth });
   doc.moveDown(0.3);
-  doc.font('Helvetica').fontSize(8).fillColor('#333');
+  doc.font('Helvetica').fontSize(9).fillColor('#333');
   [
     invoice.company.addressLine1 || '',
     invoice.company.addressLine2 || '',
     `${invoice.company.phone} | ${invoice.company.email || ''}`,
     `${invoice.company.website} | ${invoice.company.taxId}`
-  ].forEach(lineText => {
-    if (lineText.trim()) {
-      doc.text(lineText, { align: 'center', width: pageWidth, lineGap: 2 });
-    }
-  });
-  const headerBottom = doc.y + 12;
-  line(startX, headerBottom, startX + pageWidth, headerBottom, 3, '#D4AF37');
-  doc.moveDown(1.5).fillColor('#000').fontSize(11);
+  ].forEach(text => doc.text(text, { align: 'center', width: pageWidth, lineGap: 2 }));
+  line(startX, doc.y + 12, startX + pageWidth, doc.y + 12, 3, '#D4AF37');
+  doc.y += 30;
 
-  // Invoice info container
-  const gap = 24;
-  const leftWidth = (pageWidth - gap) * 0.58;
-  const rightWidth = pageWidth - gap - leftWidth;
+  // Info container
   const infoTop = doc.y;
+  const gap = 20;
+  const leftWidth = (pageWidth - gap) * 0.55;
+  const rightWidth = pageWidth - gap - leftWidth;
 
-  // Recipient
-  doc.font('Helvetica-Bold').text('DESTINATÁRIO', startX, infoTop, { width: leftWidth });
+  doc.font('Helvetica-Bold').fontSize(11).fillColor('#000').text('DESTINATÁRIO', startX, infoTop, { width: leftWidth });
   doc.moveDown(0.4);
   doc.font('Helvetica').fontSize(10);
   const recipientLines = [
@@ -395,18 +389,15 @@ const renderInvoicePdf = (res, invoice) => {
     `Telefone: ${invoice.customer.phone || '-'}`,
     invoice.customer.contact ? `Contato: ${invoice.customer.contact}` : ''
   ].filter(Boolean);
-  recipientLines.forEach(text => {
-    doc.text(text, { width: leftWidth, lineGap: 2 });
-  });
+  recipientLines.forEach(text => doc.text(text, { width: leftWidth, lineGap: 2 }));
   const leftBottom = doc.y;
 
-  // Invoice box
+  // Details box
   const boxX = startX + leftWidth + gap;
-  const boxPadding = 14;
-  const boxLabelWidth = 140;
-  let boxY = infoTop;
-  let cursorY = boxY + boxPadding;
-  const details = [
+  const boxPad = 15;
+  const labelW = 120;
+  const boxTop = infoTop;
+  const detailFields = [
     ['Fatura Nº', invoice.invoice.number],
     ['Data', invoice.invoice.date],
     ['Cliente Nº', invoice.invoice.customerNumber || '-'],
@@ -414,50 +405,49 @@ const renderInvoicePdf = (res, invoice) => {
     ['Termos de Entrega', invoice.invoice.deliveryTerms]
   ];
   doc.font('Helvetica').fontSize(10);
-  details.forEach(([label, value]) => {
-    doc.font('Helvetica-Bold').text(label, boxX + boxPadding, cursorY, { width: boxLabelWidth });
-    doc.font('Helvetica').text(value || '-', boxX + boxPadding + boxLabelWidth + 6, cursorY, {
-      width: rightWidth - boxPadding * 2 - boxLabelWidth - 6,
+  const lineHeight = doc.heightOfString('X', { width: rightWidth - boxPad * 2 });
+  const boxHeight = Math.max(130, boxPad * 2 + detailFields.length * (lineHeight + 4));
+  doc.rect(boxX, boxTop, rightWidth, boxHeight).lineWidth(2).stroke();
+  let cursorY = boxTop + boxPad;
+  detailFields.forEach(([label, value]) => {
+    doc.font('Helvetica-Bold').text(label, boxX + boxPad, cursorY, { width: labelW });
+    doc.font('Helvetica').text(value || '-', boxX + boxPad + labelW + 6, cursorY, {
+      width: rightWidth - boxPad * 2 - labelW - 6,
       align: 'right'
     });
-    cursorY += 17;
+    cursorY += lineHeight + 6;
   });
-  const boxHeight = Math.max(110, cursorY - boxY + boxPadding);
-  doc.rect(boxX, boxY, rightWidth, boxHeight).lineWidth(2).stroke();
 
-  doc.y = Math.max(leftBottom, boxY + boxHeight) + 28;
+  doc.y = Math.max(leftBottom, boxTop + boxHeight) + 30;
 
-  // Items table (single layout)
+  // Items table
   const items = invoice.items || [];
   if (items.length) {
     const tableTop = doc.y;
-    const colWidths = [40, 70, 200, 70, 80, 55]; // sum = 515 (pageWidth)
+    const colWidths = [50, 120, pageWidth - (50 + 120 + 80 + 100 + 120), 80, 100, 120];
     const colX = [];
     colWidths.reduce((acc, w, i) => { colX[i] = acc; return acc + w; }, startX);
-    const headerHeight = 26;
+    const headerHeight = 28;
     doc.rect(startX, tableTop, pageWidth, headerHeight).fillAndStroke('#f5f5f5', '#000');
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(10);
-    const headers = ['Item', 'Cód. Produto', 'Descrição', 'Quantidade', 'Preço Unitário (USD)', 'Valor Total (USD)'];
-    headers.forEach((text, idx) => {
+    ['Item', 'Cód. Produto', 'Descrição', 'Quantidade', 'Preço Unitário (USD)', 'Valor Total (USD)'].forEach((text, idx) => {
       doc.text(text, colX[idx] + 6, tableTop + 8, { width: colWidths[idx] - 12, align: idx === 0 ? 'center' : idx >= 4 ? 'right' : 'left' });
     });
     let rowY = tableTop + headerHeight;
+    doc.font('Helvetica').fontSize(10).fillColor('#000');
     items.forEach(item => {
       const desc = item.description || '-';
       const descHeight = doc.heightOfString(desc, { width: colWidths[2] - 12, lineGap: 2, align: 'left' });
-      const baseHeight = Math.max(32, descHeight + 12);
-      doc.rect(startX, rowY, pageWidth, baseHeight).stroke();
-      for (let i = 1; i < colWidths.length; i++) {
-        line(colX[i], rowY, colX[i], rowY + baseHeight);
-      }
-      doc.font('Helvetica').fontSize(10).fillColor('#000');
+      const rowHeight = Math.max(32, descHeight + 12);
+      doc.rect(startX, rowY, pageWidth, rowHeight).stroke();
+      for (let i = 1; i < colWidths.length; i++) line(colX[i], rowY, colX[i], rowY + rowHeight);
       doc.text(String(item.serial), colX[0], rowY + 8, { width: colWidths[0], align: 'center' });
       doc.text(item.partNumber || '-', colX[1] + 6, rowY + 8, { width: colWidths[1] - 12 });
       doc.text(desc, colX[2] + 6, rowY + 6, { width: colWidths[2] - 12, lineGap: 2 });
       doc.text(`${item.quantity} ${item.unit || ''}`.trim(), colX[3], rowY + 8, { width: colWidths[3], align: 'center' });
-      doc.text(formatMoney(item.unitPrice), colX[4], rowY + 8, { width: colWidths[4] - 8, align: 'right' });
-      doc.text(formatMoney(item.total), colX[5], rowY + 8, { width: colWidths[5] - 8, align: 'right' });
-      rowY += baseHeight;
+      doc.text(formatMoney(item.unitPrice), colX[4], rowY + 8, { width: colWidths[4] - 12, align: 'right' });
+      doc.text(formatMoney(item.total), colX[5], rowY + 8, { width: colWidths[5] - 12, align: 'right' });
+      rowY += rowHeight;
     });
     doc.y = rowY + 20;
   }
@@ -498,10 +488,9 @@ const renderInvoicePdf = (res, invoice) => {
   doc.moveDown(1);
 
   // Bank details
-  const bankY = doc.y;
-  const bankPadding = 12;
-  doc.rect(startX, bankY, pageWidth, 0).fillAndStroke('#f9f9f9', '#ddd'); // background placeholder
-  doc.font('Helvetica-Bold').fontSize(10).fillColor('#000').text('INSTRUÇÕES DE PAGAMENTO:', startX + bankPadding, bankY + bankPadding);
+  const bankTop = doc.y;
+  const bankPadding = 15;
+  doc.font('Helvetica-Bold').fontSize(10).fillColor('#000').text('INSTRUÇÕES DE PAGAMENTO:', startX + bankPadding, bankTop + bankPadding);
   doc.font('Helvetica').fontSize(9);
   const bankFields = [
     ['Nome do Banco', invoice.payment.bankName],
@@ -514,16 +503,16 @@ const renderInvoicePdf = (res, invoice) => {
     ['Banco Intermediário', invoice.payment.intermediaryBank],
     ['Código Swift Intermediário', invoice.payment.intermediarySwift]
   ].filter(([, v]) => v);
-  let bankCursor = bankY + bankPadding + 14;
+  let bankCursor = bankTop + bankPadding + 16;
   bankFields.forEach(([label, val]) => {
     doc.font('Helvetica-Bold').text(`${label}: `, startX + bankPadding, bankCursor, { continued: true });
     doc.font('Helvetica').text(val);
     bankCursor = doc.y;
   });
-  const bankHeight = Math.max(80, bankCursor - bankY + bankPadding);
-  doc.rect(startX, bankY, pageWidth, bankHeight).strokeColor('#ddd').stroke();
+  const bankHeight = Math.max(100, bankCursor - bankTop + bankPadding);
+  doc.rect(startX, bankTop, pageWidth, bankHeight).fillAndStroke('#f9f9f9', '#ddd');
   doc.strokeColor('#000');
-  doc.y = bankY + bankHeight + 16;
+  doc.y = bankTop + bankHeight + 20;
 
   // Legal text
   doc.font('Helvetica-Bold').fontSize(9).text('CLÁUSULA ROMALPA:');
@@ -543,7 +532,7 @@ const renderInvoicePdf = (res, invoice) => {
   line(startX, doc.y, startX + pageWidth, doc.y, 2);
   doc.moveDown(2);
   const sigTop = doc.y;
-  const sigWidth = 220;
+  const sigWidth = 250;
   const sigGap = pageWidth - sigWidth * 2;
   const leftSigX = startX;
   const rightSigX = startX + sigWidth + sigGap;
