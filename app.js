@@ -801,11 +801,25 @@
     if (cliente) {
       form.clienteNome = cliente.nome || '';
       form.clienteTaxId = cliente.documento || '';
-      form.clienteContato = cliente.telefone || '';
+      form.clienteContato = cliente.contato || cliente.telefone || '';
       form.clienteEmail = cliente.email || '';
       form.clienteTelefone = cliente.telefone || '';
       form.clienteEndereco = cliente.endereco || '';
       form.customerNumber = cliente.id || form.customerNumber;
+      form.paymentTerms = cliente.invoicePaymentTerms || form.paymentTerms;
+      form.deliveryTerms = cliente.invoiceDeliveryTerms || form.deliveryTerms;
+      form.countryOfOrigin = cliente.countryOfOrigin || form.countryOfOrigin;
+      form.hsCode = cliente.hsCode || form.hsCode;
+      form.deliveryInfo = cliente.deliveryInfo || form.deliveryInfo;
+      form.shippingMethod = cliente.shippingMethod || form.shippingMethod;
+      form.bankName = cliente.bankName || form.bankName;
+      form.bankSwift = cliente.bankSwift || form.bankSwift;
+      form.bankBranch = cliente.bankBranch || form.bankBranch;
+      form.bankAccount = cliente.bankAccount || form.bankAccount;
+      form.bankBeneficiary = cliente.bankBeneficiary || form.bankBeneficiary;
+      form.bankBeneficiaryAddress = cliente.bankBeneficiaryAddress || form.bankBeneficiaryAddress;
+      form.intermediaryBank = cliente.intermediaryBank || form.intermediaryBank;
+      form.intermediarySwift = cliente.intermediarySwift || form.intermediarySwift;
     } else if (!clienteId) {
       Object.assign(form, {
         clienteNome: '',
@@ -833,6 +847,9 @@
     }
     if (['moeda', 'desconto', 'frete'].includes(campo)) {
       calcularInvoiceResumo();
+    }
+    if (['invoicePaymentTerms', 'invoiceDeliveryTerms', 'countryOfOrigin', 'hsCode', 'deliveryInfo', 'shippingMethod', 'bankName', 'bankSwift', 'bankBranch', 'bankAccount', 'bankBeneficiary', 'bankBeneficiaryAddress', 'intermediaryBank', 'intermediarySwift'].includes(campo)) {
+      // keep values in form; recalculation not needed here
     }
   };
 
@@ -1030,6 +1047,7 @@
       customerTaxId: form.clienteTaxId,
       customerEmail: form.clienteEmail,
       customerPhone: form.clienteTelefone || form.clienteContato,
+      customerContact: form.clienteContato,
       invoiceNumber: form.invoiceNumber,
       invoiceDate: form.invoiceDate || getDefaultInvoiceForm().invoiceDate,
       customerNumber: form.customerNumber || form.clienteId,

@@ -203,6 +203,34 @@ const sanitizeText = (value, fallback = '') => {
   return value.toString().trim();
 };
 
+const buildClienteDataFromInvoice = (body = {}) => {
+  const base = {
+    nome: sanitizeText(body.nome || body.customerName, ''),
+    documento: sanitizeText(body.documento || body.customerTaxId, ''),
+    email: sanitizeText(body.email || body.customerEmail, ''),
+    telefone: sanitizeText(body.telefone || body.customerPhone, ''),
+    endereco: sanitizeText(body.endereco || body.customerAddressLine1, ''),
+    contato: sanitizeText(body.contato || body.customerContact, '')
+  };
+  return {
+    ...base,
+    invoicePaymentTerms: sanitizeText(body.invoicePaymentTerms || body.paymentTerms),
+    invoiceDeliveryTerms: sanitizeText(body.invoiceDeliveryTerms || body.deliveryTerms),
+    countryOfOrigin: sanitizeText(body.countryOfOrigin),
+    hsCode: sanitizeText(body.hsCode),
+    deliveryInfo: sanitizeText(body.deliveryInfo),
+    shippingMethod: sanitizeText(body.shippingMethod),
+    bankName: sanitizeText(body.bankName),
+    bankSwift: sanitizeText(body.bankSwift || body.swiftCode),
+    bankBranch: sanitizeText(body.bankBranch),
+    bankAccount: sanitizeText(body.bankAccount || body.beneficiaryAccount || body.iban),
+    bankBeneficiary: sanitizeText(body.bankBeneficiary || body.beneficiaryName),
+    bankBeneficiaryAddress: sanitizeText(body.bankBeneficiaryAddress || body.beneficiaryAddress),
+    intermediaryBank: sanitizeText(body.intermediaryBank),
+    intermediarySwift: sanitizeText(body.intermediarySwift)
+  };
+};
+
 const parseAmount = value => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -302,134 +330,260 @@ const buildInvoicePayload = payload => {
 };
 
 const renderInvoicePdf = (res, invoice) => {
-  const doc = new PDFDocument({ size: 'A4', margin: 50 });
+  const doc = new PDFDocument({ size: 'A4', margin: 40 });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="invoice-${invoice.invoice.number}.pdf"`);
   doc.pipe(res);
 
-  const textLine = (text, options = {}) => {
-    doc.text(text, options);
-    doc.moveDown(options.moveDown || 0.15);
+  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const startX = doc.page.margins.left;
+
+  const formatMoney = value => {
+    const num = Number(value) || 0;
+    const parts = num.toFixed(2).split('.');
+    const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return `USD $ ${intPart},${parts[1]}`;
   };
 
-  doc.fontSize(22).text(invoice.company.name, { align: 'center' });
-  doc.moveDown(0.2);
-  doc.fontSize(10).text(invoice.company.addressLine1, { align: 'center' });
-  textLine(invoice.company.addressLine2, { align: 'center' });
-  textLine(`${invoice.company.phone} | ${invoice.company.fax} | ${invoice.company.email}`, { align: 'center' });
-  textLine(`${invoice.company.website} | ${invoice.company.taxId}`, { align: 'center' });
+  const toUpperSafe = value => (value || '').toString().toUpperCase();
+  const splitDescription = desc => {
+    const lines = (desc || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    if (!lines.length) return { title: '', bullets: [] };
+    const [title, ...rest] = lines;
+    return { title, bullets: rest };
+  };
 
-  doc.moveDown(0.5);
-  doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+  const line = (x1, y1, x2, y2, width = 1, color = '#000') => {
+    doc.save();
+    doc.lineWidth(width).strokeColor(color).moveTo(x1, y1).lineTo(x2, y2).stroke();
+    doc.restore();
+  };
 
-  doc.moveDown(0.5);
-  doc.fontSize(11).text('MESSRS.', { underline: true });
-  doc.fontSize(10);
-  textLine(invoice.customer.name);
-  textLine(invoice.customer.addressLine1);
-  textLine(invoice.customer.addressLine2);
-  textLine(invoice.customer.cityState);
-  textLine(invoice.customer.country);
-  textLine(`Tax ID / CNPJ: ${invoice.customer.taxId}`);
-  textLine(`Email: ${invoice.customer.email}`);
-  textLine(`Phone: ${invoice.customer.phone}`);
-
-  doc.moveDown(0.5);
-  const infoTop = doc.y;
-  doc.rect(50, infoTop, 495, 60).stroke();
-  const infoFields = [
-    ['Invoice No.', invoice.invoice.number],
-    ['Date', invoice.invoice.date],
-    ['Customer No.', invoice.invoice.customerNumber || ''],
-    ['Payment Terms', invoice.invoice.paymentTerms],
-    ['Delivery Terms', invoice.invoice.deliveryTerms]
-  ];
-  doc.fontSize(10);
-  infoFields.forEach((field, index) => {
-    const labelX = 60;
-    const valueX = 200;
-    const offsetY = infoTop + 5 + index * 11;
-    doc.text(`${field[0]}:`, labelX, offsetY);
-    doc.text(field[1], valueX, offsetY);
-  });
-  doc.moveDown(5);
-  doc.moveDown(1);
-
-  const tableTop = doc.y + 10;
-  const columnX = [50, 90, 170, 320, 400, 470];
-  const rowHeight = 25;
-  const headerLabels = ['S.NO', 'Part No.', 'Description', 'Quantity', 'Unit Price (USD)', 'Total Amount (USD)'];
-  doc.rect(50, tableTop - 15, 495, rowHeight).fillAndStroke('#f0f0f0', '#000');
+  // Header
+  doc.font('Helvetica-Bold').fontSize(24).text(invoice.company.name || 'ZENITH PAY', startX, doc.y, { align: 'center', width: pageWidth });
+  doc.moveDown(0.3);
+  doc.font('Helvetica').fontSize(9).fillColor('#333');
+  doc.text(invoice.company.addressLine1 || '', { align: 'center', width: pageWidth, lineGap: 2 });
+  doc.text(invoice.company.addressLine2 || '', { align: 'center', width: pageWidth, lineGap: 2 });
+  doc.text(`${invoice.company.phone} | ${invoice.company.fax} | ${invoice.company.email}`, { align: 'center', width: pageWidth, lineGap: 2 });
+  doc.text(`${invoice.company.website} | ${invoice.company.taxId}`, { align: 'center', width: pageWidth, lineGap: 2 });
+  const headerBottom = doc.y + 12;
+  line(startX, headerBottom, startX + pageWidth, headerBottom, 3, '#D4AF37');
+  doc.moveDown(1.5);
   doc.fillColor('#000');
-  headerLabels.forEach((label, i) => {
-    doc.text(label, columnX[i] + 2, tableTop - 12, { width: (i === columnX.length - 1 ? 80 : columnX[i + 1] - columnX[i] - 4), align: 'left' });
+
+  // Recipient + Invoice details
+  const infoTop = doc.y + 5;
+  const gap = 20;
+  const leftWidth = (pageWidth - gap) * 0.55;
+  const rightWidth = Math.max(250, pageWidth - gap - leftWidth);
+  const rightX = startX + leftWidth + gap;
+
+  // Recipient
+  doc.font('Helvetica-Bold').fontSize(11).text('DESTINATÁRIO', startX, infoTop, { width: leftWidth, lineGap: 4 });
+  let leftY = doc.y + 4;
+  doc.font('Helvetica-Bold').fontSize(10).text(invoice.customer.name || '-', startX, leftY, { width: leftWidth, lineGap: 3 });
+  leftY = doc.y;
+  doc.font('Helvetica').fontSize(10).text(invoice.customer.addressLine1 || '', startX, leftY, { width: leftWidth, lineGap: 3 });
+  doc.text(invoice.customer.addressLine2 || '', { width: leftWidth, lineGap: 3 });
+  doc.text(invoice.customer.cityState || '', { width: leftWidth, lineGap: 3 });
+  doc.text(invoice.customer.country || '', { width: leftWidth, lineGap: 3 });
+  doc.text(`CNPJ / Tax ID: ${invoice.customer.taxId || '-'}`, { width: leftWidth, lineGap: 3 });
+  doc.text(`Email: ${invoice.customer.email || '-'}`, { width: leftWidth, lineGap: 3 });
+  doc.text(`Telefone: ${invoice.customer.phone || '-'}`, { width: leftWidth, lineGap: 3 });
+  leftY = doc.y;
+
+  // Invoice details box
+  const boxPadding = 12;
+  const boxLabelWidth = 120;
+  let boxCurrentY = infoTop + 6;
+  const detailFields = [
+    ['Fatura Nº', invoice.invoice.number],
+    ['Data', invoice.invoice.date],
+    ['Cliente Nº', invoice.invoice.customerNumber || ''],
+    ['Condições de Pagamento', invoice.invoice.paymentTerms],
+    ['Termos de Entrega', invoice.invoice.deliveryTerms]
+  ];
+  const boxInnerX = rightX + boxPadding;
+  boxCurrentY += boxPadding;
+  doc.font('Helvetica').fontSize(10);
+  detailFields.forEach(([label, value]) => {
+    doc.font('Helvetica-Bold').text(`${label}:`, boxInnerX, boxCurrentY, { width: boxLabelWidth });
+    doc.font('Helvetica').text(value || '-', boxInnerX + boxLabelWidth, boxCurrentY, { width: rightWidth - boxPadding * 2 - boxLabelWidth, align: 'right' });
+    boxCurrentY += 16;
+  });
+  const boxHeight = boxCurrentY - infoTop + boxPadding;
+  doc.rect(rightX, infoTop, rightWidth, boxHeight).lineWidth(2).stroke();
+
+  const infoBottom = Math.max(leftY, infoTop + boxHeight);
+  doc.y = infoBottom + 20;
+
+  // Items table
+  const tableTop = doc.y;
+  const colWidths = [50, 120, Math.max(0, pageWidth - (50 + 120 + 80 + 100 + 120)), 80, 100, 120];
+  const colX = [];
+  colWidths.reduce((acc, width, idx) => {
+    colX[idx] = acc;
+    return acc + width;
+  }, startX);
+  const headerHeight = 26;
+  doc.rect(startX, tableTop, pageWidth, headerHeight).fillAndStroke('#f5f5f5', '#000');
+  doc.fillColor('#000').font('Helvetica-Bold').fontSize(10);
+  const headers = ['Item', 'Cód. Produto', 'Descrição', 'Quantidade', 'Preço Unitário (USD)', 'Valor Total (USD)'];
+  headers.forEach((text, idx) => {
+    doc.text(text, colX[idx] + 6, tableTop + 8, { width: colWidths[idx] - 12, align: idx === 0 ? 'center' : idx >= 4 ? 'right' : 'left' });
   });
 
-  let currentY = tableTop + rowHeight - 15;
+  let rowY = tableTop + headerHeight;
   invoice.items.forEach(item => {
-    doc.rect(50, currentY - 5, 495, rowHeight).stroke();
-    doc.text(String(item.serial), columnX[0] + 2, currentY, { width: columnX[1] - columnX[0] - 4 });
-    doc.text(item.partNumber, columnX[1] + 2, currentY, { width: columnX[2] - columnX[1] - 4 });
-    doc.text(item.description, columnX[2] + 2, currentY, { width: columnX[3] - columnX[2] - 4 });
-    doc.text(`${item.quantity} ${item.unit}`, columnX[3] + 2, currentY);
-    doc.text(item.unitPrice.toFixed(2), columnX[4] + 2, currentY);
-    doc.text(item.total.toFixed(2), columnX[5] + 2, currentY);
-    currentY += rowHeight;
+    const { title, bullets } = splitDescription(item.description);
+    doc.fontSize(10).font('Helvetica-Bold');
+    const titleHeight = title ? doc.heightOfString(title, { width: colWidths[2] - 12 }) : 0;
+    doc.font('Helvetica').fontSize(9).fillColor('#555');
+    const bulletsHeight = bullets.reduce((acc, bullet) => acc + doc.heightOfString(`• ${bullet}`, { width: colWidths[2] - 12 }), 0);
+    doc.fillColor('#000');
+    const baseHeight = Math.max(30, titleHeight + bulletsHeight + 10);
+
+    // Row borders
+    doc.rect(startX, rowY, pageWidth, baseHeight).stroke();
+    for (let i = 1; i < colWidths.length; i++) {
+      line(colX[i], rowY, colX[i], rowY + baseHeight);
+    }
+
+    // Item number
+    doc.font('Helvetica').fontSize(10).fillColor('#000').text(String(item.serial), colX[0], rowY + 8, { width: colWidths[0], align: 'center' });
+    // Part number
+    doc.text(item.partNumber || '-', colX[1] + 6, rowY + 8, { width: colWidths[1] - 12 });
+    // Description
+    let descY = rowY + 6;
+    if (title) {
+      doc.font('Helvetica-Bold').fontSize(10).text(title, colX[2] + 6, descY, { width: colWidths[2] - 12, lineGap: 2 });
+      descY = doc.y + 2;
+    }
+    doc.font('Helvetica').fontSize(9).fillColor('#555');
+    bullets.forEach(bullet => {
+      doc.text(`• ${bullet}`, colX[2] + 6, descY, { width: colWidths[2] - 12, lineGap: 2 });
+      descY = doc.y + 1;
+    });
+    doc.fillColor('#000');
+    // Quantity
+    doc.font('Helvetica').fontSize(10).text(`${item.quantity} ${item.unit || ''}`.trim(), colX[3], rowY + 8, { width: colWidths[3], align: 'center' });
+    // Unit price / total
+    doc.text(formatMoney(item.unitPrice), colX[4], rowY + 8, { width: colWidths[4] - 6, align: 'right' });
+    doc.text(formatMoney(item.total), colX[5], rowY + 8, { width: colWidths[5] - 6, align: 'right' });
+
+    rowY += baseHeight;
   });
+  doc.y = rowY + 20;
+
+  // Totals section
+  const totalsLabelW = 150;
+  const totalsValueW = 150;
+  const totalsStartX = startX + pageWidth - (totalsLabelW + totalsValueW);
+  const totalLines = [
+    ['Subtotal', invoice.totals.subtotal],
+    ['Desconto', invoice.totals.discount],
+    ['Frete', invoice.totals.shipping]
+  ];
+  doc.font('Helvetica').fontSize(11);
+  totalLines.forEach(([label, val]) => {
+    doc.text(label, totalsStartX, doc.y, { width: totalsLabelW, align: 'right' });
+    doc.font('Helvetica-Bold').text(formatMoney(val), totalsStartX + totalsLabelW, doc.y, { width: totalsValueW, align: 'right' });
+    doc.moveDown(0.4);
+    doc.font('Helvetica');
+  });
+  const grandY = doc.y + 6;
+  line(totalsStartX, grandY, startX + pageWidth, grandY, 2);
+  doc.font('Helvetica-Bold').fontSize(13).text('TOTAL', totalsStartX, grandY + 6, { width: totalsLabelW, align: 'right' });
+  doc.text(formatMoney(invoice.totals.total), totalsStartX + totalsLabelW, grandY + 6, { width: totalsValueW, align: 'right' });
+  line(totalsStartX, grandY + 28, startX + pageWidth, grandY + 28, 3);
+  doc.y = grandY + 40;
+  doc.font('Helvetica').fontSize(10).font('Helvetica-Oblique').text(`(DIGA-SE ${toUpperSafe(invoice.amountInWords || '')})`, startX, doc.y, { width: pageWidth, align: 'right' });
+  doc.moveDown(2);
+
+  // Additional info
+  const infoBlocks = [
+    ['PAÍS DE ORIGEM', invoice.logistic.countryOfOrigin || '-'],
+    ['CÓDIGO HS', invoice.logistic.hsCode || '-'],
+    ['INFORMAÇÕES DE ENTREGA', `${invoice.logistic.deliveryInfo || ''}${invoice.logistic.shippingMethod ? `\nMétodo de Envio: ${invoice.logistic.shippingMethod}` : ''}`.trim()]
+  ];
+  doc.font('Helvetica').fontSize(10);
+  infoBlocks.forEach(([title, content]) => {
+    doc.font('Helvetica-Bold').text(title, { width: pageWidth });
+    doc.font('Helvetica').text(content || '-', { width: pageWidth, lineGap: 2 });
+    doc.moveDown(0.8);
+  });
+
+  // Bank details
+  const bankBoxY = doc.y + 4;
+  const bankPadding = 12;
+  const bankContentY = bankBoxY + bankPadding;
+  const bankLines = [
+    ['Nome do Banco', invoice.payment.bankName],
+    ['Código Swift', invoice.payment.swiftCode],
+    ['Agência', invoice.payment.bankBranch],
+    ['Conta Beneficiário', invoice.payment.beneficiaryAccount],
+    ['IBAN', invoice.payment.iban],
+    ['Nome do Beneficiário', invoice.payment.beneficiaryName],
+    ['Endereço do Beneficiário', invoice.payment.beneficiaryAddress],
+    ['Banco Intermediário', invoice.payment.intermediaryBank],
+    ['Código Swift Intermediário', invoice.payment.intermediarySwift]
+  ].filter(([, val]) => val);
+  let bankHeight = bankPadding + 14;
+  doc.font('Helvetica').fontSize(9);
+  bankLines.forEach(([label, val]) => {
+    const textHeight = doc.heightOfString(`${label}: ${val}`, { width: pageWidth - bankPadding * 2 });
+    bankHeight += textHeight;
+  });
+  bankHeight = Math.max(80, bankHeight + bankPadding);
+  doc.save();
+  doc.rect(startX, bankBoxY, pageWidth, bankHeight).fillAndStroke('#f9f9f9', '#ddd');
+  doc.restore();
+  doc.font('Helvetica-Bold').fontSize(10).fillColor('#000').text('INSTRUÇÕES DE PAGAMENTO:', startX + bankPadding, bankContentY);
+  doc.font('Helvetica').fontSize(9).fillColor('#000');
+  let bankY = bankContentY + 14;
+  bankLines.forEach(([label, val]) => {
+    doc.font('Helvetica-Bold').text(`${label}: `, startX + bankPadding, bankY, { continued: true });
+    doc.font('Helvetica').text(val);
+    bankY = doc.y;
+  });
+  doc.strokeColor('#000');
+  doc.y = bankBoxY + bankHeight + 16;
+
+  // Legal text
+  doc.font('Helvetica-Bold').fontSize(9).text('CLÁUSULA ROMALPA');
+  doc.font('Helvetica').fontSize(9).fillColor('#333').text(INVOICE_DEFAULTS.romalpaClause, { lineGap: 2 });
+  doc.moveDown(0.6);
+  doc.font('Helvetica-Bold').fillColor('#000').text('DECLARAÇÕES LEGAIS');
+  doc.font('Helvetica').fillColor('#333').text(invoice.acknowledgement || 'Mercadorias recebidas em boas condições. Mercadorias vendidas não são retornáveis.', { lineGap: 2 });
+  doc.moveDown(0.6);
+  doc.font('Helvetica-Bold').fillColor('#000').text('TERMOS E CONDIÇÕES');
+  INVOICE_DEFAULTS.terms.forEach(term => {
+    doc.font('Helvetica').fillColor('#333').text(`• ${term}`, { lineGap: 2 });
+  });
+  doc.fillColor('#000');
+
+  // Footer signatures
+  doc.moveDown(3);
+  line(startX, doc.y, startX + pageWidth, doc.y, 2);
+  doc.moveDown(2);
+  const sigTop = doc.y;
+  const sigWidth = (pageWidth - 40) / 2;
+  const sigGap = 40;
+  const leftSigX = startX;
+  const rightSigX = startX + sigWidth + sigGap;
+
+  doc.font('Helvetica').fontSize(9).text('Mercadorias recebidas em boas condições\nMercadorias vendidas não são retornáveis', leftSigX, sigTop, { width: sigWidth, align: 'center', lineGap: 2 });
+  doc.font('Helvetica').fontSize(9).text('Em Nome de\nZenith Pay', rightSigX, sigTop, { width: sigWidth, align: 'center', lineGap: 2 });
+  const sigLineY = sigTop + 70;
+  line(leftSigX + 20, sigLineY, leftSigX + sigWidth - 20, sigLineY);
+  line(rightSigX + 20, sigLineY, rightSigX + sigWidth - 20, sigLineY);
+  doc.font('Helvetica').fontSize(9).text('Carimbo e Assinatura', leftSigX, sigLineY + 6, { width: sigWidth, align: 'center' });
+  doc.text('Assinatura Autorizada', rightSigX, sigLineY + 6, { width: sigWidth, align: 'center' });
+  doc.y = sigLineY + 40;
 
   doc.moveDown(1.5);
-  doc.fontSize(10);
-  textLine(`Subtotal: ${invoice.totals.formatted.subtotal}`, { align: 'right' });
-  textLine(`Discount: ${invoice.totals.formatted.discount}`, { align: 'right' });
-  textLine(`Shipping/Freight: ${invoice.totals.formatted.shipping}`, { align: 'right' });
-  doc.fontSize(12).text(`TOTAL: ${invoice.totals.formatted.total}`, { align: 'right', underline: true });
-
-  doc.moveDown(0.5);
-  doc.fontSize(10).text('(SAY US DOLLARS ' + (invoice.amountInWords || '') + ')', { align: 'right', italics: true });
-
-  doc.moveDown(1);
-  doc.fontSize(11).text('COUNTRY OF ORIGIN:', { continued: true }).fontSize(10).text(` ${invoice.logistic.countryOfOrigin}`);
-  doc.fontSize(11).text('HS CODE:', { continued: true }).fontSize(10).text(` ${invoice.logistic.hsCode}`);
-  doc.fontSize(11).text('DELIVERY INFORMATION:');
-  doc.fontSize(10).text(invoice.logistic.deliveryInfo || '');
-  doc.fontSize(10).text(`Shipping Method: ${invoice.logistic.shippingMethod}`);
-
-  doc.moveDown(0.5);
-  doc.rect(50, doc.y, 495, 110).stroke();
-  const paymentTop = doc.y + 5;
-  doc.fontSize(11).text('PAYMENT INSTRUCTIONS:', 60, paymentTop);
-  const paymentFields = [
-    ['Bank Name', invoice.payment.bankName],
-    ['Swift Code', invoice.payment.swiftCode],
-    ['Bank Branch', invoice.payment.bankBranch],
-    ['Beneficiary A/C', invoice.payment.beneficiaryAccount],
-    ['IBAN', invoice.payment.iban],
-    ['Beneficiary Name', invoice.payment.beneficiaryName],
-    ['Beneficiary Address', invoice.payment.beneficiaryAddress],
-    ['Intermediary Bank', invoice.payment.intermediaryBank],
-    ['Intermediary Swift Code', invoice.payment.intermediarySwift]
-  ];
-  let paymentY = paymentTop + 12;
-  paymentFields.forEach(field => {
-    if (!field[1]) return;
-    doc.fontSize(10).text(`${field[0]}: ${field[1]}`, 60, paymentY);
-    paymentY += 12;
-  });
-
-  doc.moveDown(5);
-  doc.fontSize(10).text(`Romalpa Clause: ${INVOICE_DEFAULTS.romalpaClause}`);
-  doc.moveDown(0.5);
-  doc.fontSize(11).text('Terms & Conditions:');
-  INVOICE_DEFAULTS.terms.forEach(term => {
-    doc.fontSize(10).text(`• ${term}`);
-  });
-
-  doc.moveDown(1);
-  doc.fontSize(10).text(invoice.acknowledgement, { align: 'center' });
-  doc.moveDown(2);
-  doc.fontSize(10).text('For & On Behalf Of', { align: 'center' });
-  doc.fontSize(12).text(invoice.signatureName, { align: 'center' });
-  doc.fontSize(9).text('This is a computer generated invoice. No signature required.', { align: 'center', opacity: 0.7 });
+  doc.font('Helvetica-Oblique').fontSize(9).fillColor('#666').text('Esta é uma fatura gerada por computador. Nenhuma assinatura necessária.', { align: 'center' });
 
   doc.end();
 };
@@ -536,20 +690,40 @@ app.post('/invoices/generate', authenticate, adminOnly, asyncHandler(async (req,
     return res.status(400).json({ message: 'Inclua ao menos um item na invoice.' });
   }
 
-  let clienteData = {};
+  const clientePayload = buildClienteDataFromInvoice({
+    ...body,
+    customerName: body.customerName,
+    customerTaxId: body.customerTaxId,
+    customerPhone: body.customerPhone,
+    customerEmail: body.customerEmail,
+    customerAddressLine1: body.customerAddressLine1
+  });
+
+  if (!clientePayload.nome || !clientePayload.documento) {
+    return res.status(400).json({ message: 'Informe nome e documento do cliente para gerar a invoice.' });
+  }
+
+  let cliente;
   if (body.clienteId) {
-    const cliente = await prisma.cliente.findUnique({ where: { id: body.clienteId } });
+    cliente = await prisma.cliente.findUnique({ where: { id: body.clienteId } });
     if (!cliente) {
       return res.status(404).json({ message: 'Cliente não encontrado.' });
     }
-    clienteData = {
-      customerName: cliente.nome,
-      customerAddressLine1: cliente.endereco || '',
-      customerPhone: cliente.telefone || '',
-      customerEmail: cliente.email || '',
-      customerTaxId: cliente.documento || ''
-    };
+    cliente = await prisma.cliente.update({
+      where: { id: body.clienteId },
+      data: clientePayload
+    });
+  } else {
+    cliente = await prisma.cliente.create({ data: clientePayload });
   }
+
+  const clienteData = {
+    customerName: cliente.nome,
+    customerAddressLine1: cliente.endereco || '',
+    customerPhone: cliente.telefone || '',
+    customerEmail: cliente.email || '',
+    customerTaxId: cliente.documento || ''
+  };
 
   const payload = buildInvoicePayload({
     ...clienteData,
@@ -663,19 +837,107 @@ app.get('/clientes', authenticate, asyncHandler(async (req, res) => {
 }));
 
 app.post('/clientes', authenticate, asyncHandler(async (req, res) => {
-  const { nome, documento, email, telefone, endereco, observacoes } = req.body;
+  const {
+    nome,
+    documento,
+    email,
+    telefone,
+    endereco,
+    observacoes,
+    contato,
+    invoicePaymentTerms,
+    invoiceDeliveryTerms,
+    countryOfOrigin,
+    hsCode,
+    deliveryInfo,
+    shippingMethod,
+    bankName,
+    bankSwift,
+    bankBranch,
+    bankAccount,
+    bankBeneficiary,
+    bankBeneficiaryAddress,
+    intermediaryBank,
+    intermediarySwift
+  } = req.body;
   const cliente = await prisma.cliente.create({
-    data: { nome, documento, email, telefone, endereco, observacoes }
+    data: {
+      nome,
+      documento,
+      email,
+      telefone,
+      endereco,
+      observacoes,
+      contato,
+      invoicePaymentTerms,
+      invoiceDeliveryTerms,
+      countryOfOrigin,
+      hsCode,
+      deliveryInfo,
+      shippingMethod,
+      bankName,
+      bankSwift,
+      bankBranch,
+      bankAccount,
+      bankBeneficiary,
+      bankBeneficiaryAddress,
+      intermediaryBank,
+      intermediarySwift
+    }
   });
   res.status(201).json(cliente);
 }));
 
 app.put('/clientes/:id', authenticate, asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { nome, documento, email, telefone, endereco, observacoes } = req.body;
+  const {
+    nome,
+    documento,
+    email,
+    telefone,
+    endereco,
+    observacoes,
+    contato,
+    invoicePaymentTerms,
+    invoiceDeliveryTerms,
+    countryOfOrigin,
+    hsCode,
+    deliveryInfo,
+    shippingMethod,
+    bankName,
+    bankSwift,
+    bankBranch,
+    bankAccount,
+    bankBeneficiary,
+    bankBeneficiaryAddress,
+    intermediaryBank,
+    intermediarySwift
+  } = req.body;
   const cliente = await prisma.cliente.update({
     where: { id },
-    data: { nome, documento, email, telefone, endereco, observacoes }
+    data: {
+      nome,
+      documento,
+      email,
+      telefone,
+      endereco,
+      observacoes,
+      contato,
+      invoicePaymentTerms,
+      invoiceDeliveryTerms,
+      countryOfOrigin,
+      hsCode,
+      deliveryInfo,
+      shippingMethod,
+      bankName,
+      bankSwift,
+      bankBranch,
+      bankAccount,
+      bankBeneficiary,
+      bankBeneficiaryAddress,
+      intermediaryBank,
+      intermediarySwift
+    }
   });
   res.json(cliente);
 }));

@@ -39,6 +39,21 @@ model Cliente {
   telefone    String
   endereco    String?
   observacoes String?
+  contato                 String?
+  invoicePaymentTerms     String?
+  invoiceDeliveryTerms    String?
+  countryOfOrigin         String?
+  hsCode                  String?
+  deliveryInfo            String?
+  shippingMethod          String?
+  bankName                String?
+  bankSwift               String?
+  bankBranch              String?
+  bankAccount             String?
+  bankBeneficiary         String?
+  bankBeneficiaryAddress  String?
+  intermediaryBank        String?
+  intermediarySwift       String?
   createdAt   DateTime  @default(now())
   cotacoes    Cotacao[]
 }
