@@ -33,7 +33,8 @@
     clientes: 'clientes',
     comerciais: 'comerciais',
     admin: 'adminServicos',
-    kyc: 'adminMaster'
+    kyc: 'adminMaster',
+    invoice: 'adminMaster'
   };
 
   const currencyFormatter = new Intl.NumberFormat('pt-BR', {
@@ -45,6 +46,7 @@
     currency: 'USD'
   });
   const MAX_COTACAO_ITENS = 3;
+  const MAX_INVOICE_ITENS = 3;
 
   const safeParse = (value, fallback = null) => {
     try {
@@ -68,7 +70,9 @@
     kycRegistros: [],
     cotacaoItens: [],
     cotacaoMoeda: 'BRL',
-    cotacaoUsdtBrl: null
+    cotacaoUsdtBrl: null,
+    invoiceItens: [],
+    invoiceForm: null
   };
 
   const el = id => document.getElementById(id);
@@ -201,7 +205,64 @@
   if (state.cotacaoItens.length === 0) {
     resetarCotacaoItens();
   }
+
+  let invoiceItemSeq = 0;
+  const gerarInvoiceItemId = () => `inv-item-${Date.now()}-${invoiceItemSeq++}`;
+  const novoInvoiceItem = (overrides = {}) => ({
+    uid: gerarInvoiceItemId(),
+    partNumber: '',
+    description: '',
+    quantity: '',
+    unit: 'PCS',
+    unitPrice: '',
+    ...overrides
+  });
+  const getDefaultInvoiceForm = () => {
+    const hoje = new Date();
+    const dataIso = hoje.toISOString().slice(0, 10);
+    return {
+      clienteId: '',
+      clienteNome: '',
+      clienteTaxId: '',
+      clienteContato: '',
+      clienteEmail: '',
+      clienteTelefone: '',
+      clienteEndereco: '',
+      customerNumber: '',
+      invoiceNumber: '',
+      invoiceDate: dataIso,
+      moeda: 'USD',
+      paymentTerms: 'Prepayment',
+      deliveryTerms: 'FOB',
+      countryOfOrigin: 'Brazil',
+      hsCode: '',
+      deliveryInfo: '',
+      shippingMethod: 'Standard',
+      desconto: 0,
+      frete: 0,
+      observacoes: '',
+      bankName: '',
+      bankSwift: '',
+      bankBranch: '',
+      bankAccount: '',
+      bankBeneficiary: 'ZENITH PAY',
+      bankBeneficiaryAddress: '',
+      intermediaryBank: '',
+      intermediarySwift: ''
+    };
+  };
+  const resetarInvoice = () => {
+    state.invoiceForm = getDefaultInvoiceForm();
+    state.invoiceItens = [novoInvoiceItem()];
+  };
+  const prepararEstadoInvoice = () => {
+    if (!state.invoiceForm || !Array.isArray(state.invoiceItens) || state.invoiceItens.length === 0) {
+      resetarInvoice();
+    }
+  };
+  prepararEstadoInvoice();
   const temCotacaoMultiUI = () => Boolean(el('cotacaoItensContainer'));
+  const temInvoiceUI = () => Boolean(el('invoiceItensContainer'));
 
   const formatTickerValue = value => {
     const num = Number(value);
@@ -305,6 +366,13 @@
     state.servicoEditando = null;
     state.clienteEditando = null;
     state.comercialEditando = null;
+    resetarInvoice();
+    if (temInvoiceUI()) {
+      renderInvoiceForm();
+      renderInvoiceItens();
+      calcularInvoiceResumo();
+      setInvoiceStatus('');
+    }
     if (STORAGE_OK) {
       window.localStorage.removeItem(TOKEN_KEY);
       window.localStorage.removeItem(USER_KEY);
@@ -312,7 +380,9 @@
   };
 
   const apiRequest = async (path, options = {}) => {
+    const { responseType } = options;
     const config = { ...options };
+    delete config.responseType;
     config.headers = new Headers(options.headers || {});
     if (state.token) {
       config.headers.set('Authorization', `Bearer ${state.token}`);
@@ -321,6 +391,20 @@
       config.headers.set('Content-Type', 'application/json');
     }
     const response = await fetch(path, config);
+    if (responseType === 'blob') {
+      if (!response.ok) {
+        const errorText = await response.text();
+        let message = errorText || 'Falha ao comunicar com o servidor';
+        try {
+          const parsed = errorText ? JSON.parse(errorText) : null;
+          message = parsed?.message || message;
+        } catch (parseError) {
+          // ignore parse error, fallback to text/default
+        }
+        throw new Error(message);
+      }
+      return await response.blob();
+    }
     if (response.status === 204) {
       return null;
     }
@@ -615,6 +699,413 @@
     return 'BRL';
   };
 
+  const setInvoiceStatus = (message, type = '') => {
+    const box = el('invoiceStatusMessage');
+    if (!box) return;
+    box.textContent = message || '';
+    box.classList.remove('success', 'error');
+    if (!message) {
+      box.style.display = 'none';
+      return;
+    }
+    if (type === 'success') box.classList.add('success');
+    if (type === 'error') box.classList.add('error');
+    box.style.display = 'block';
+  };
+
+  const atualizarSelectClientesInvoice = () => {
+    const select = el('invoiceCliente');
+    if (!select) return;
+    const selecionado = state.invoiceForm?.clienteId || '';
+    select.innerHTML = '<option value="">Selecione um cliente cadastrado</option>';
+    state.clientes.forEach(cliente => {
+      const option = document.createElement('option');
+      option.value = cliente.id;
+      option.textContent = cliente.nome;
+      select.appendChild(option);
+    });
+    select.value = selecionado && state.clientes.some(c => c.id === selecionado) ? selecionado : '';
+  };
+
+  const renderInvoiceForm = () => {
+    if (!temInvoiceUI()) return;
+    const form = state.invoiceForm || getDefaultInvoiceForm();
+    atualizarSelectClientesInvoice();
+    setValue('invoiceClienteNome', form.clienteNome || '');
+    setValue('invoiceClienteTaxId', form.clienteTaxId || '');
+    setValue('invoiceClienteContato', form.clienteContato || '');
+    setValue('invoiceClienteEmail', form.clienteEmail || '');
+    setValue('invoiceClienteTelefone', form.clienteTelefone || '');
+    setValue('invoiceClienteEndereco', form.clienteEndereco || '');
+    setValue('invoiceNumero', form.invoiceNumber || '');
+    setValue('invoiceData', form.invoiceDate || getDefaultInvoiceForm().invoiceDate);
+    setValue('invoicePaymentTerms', form.paymentTerms || '');
+    setValue('invoiceDeliveryTerms', form.deliveryTerms || '');
+    setValue('invoiceObservacoes', form.observacoes || '');
+    setValue('invoiceBankName', form.bankName || '');
+    setValue('invoiceBankSwift', form.bankSwift || '');
+    setValue('invoiceBankBranch', form.bankBranch || '');
+    setValue('invoiceBankAccount', form.bankAccount || '');
+    setValue('invoiceBankBeneficiary', form.bankBeneficiary || '');
+    setValue('invoiceBankBeneficiaryAddress', form.bankBeneficiaryAddress || '');
+    setValue('invoiceIntermediaryBank', form.intermediaryBank || '');
+    setValue('invoiceIntermediarySwift', form.intermediarySwift || '');
+    setValue('invoiceDesconto', form.desconto || '');
+    setValue('invoiceFrete', form.frete || '');
+    setValue('invoicePaisOrigem', form.countryOfOrigin || '');
+    setValue('invoiceHsCode', form.hsCode || '');
+    setValue('invoiceDeliveryInfo', form.deliveryInfo || '');
+    const moedaSelect = el('invoiceMoeda');
+    if (moedaSelect) {
+      moedaSelect.value = form.moeda || 'USD';
+    }
+  };
+
+  const coletarInvoiceFormDoDom = () => {
+    prepararEstadoInvoice();
+    const form = state.invoiceForm;
+    form.clienteId = (el('invoiceCliente')?.value || '').trim();
+    form.clienteNome = (el('invoiceClienteNome')?.value || '').trim();
+    form.clienteTaxId = (el('invoiceClienteTaxId')?.value || '').trim();
+    form.clienteContato = (el('invoiceClienteContato')?.value || '').trim();
+    form.clienteEmail = (el('invoiceClienteEmail')?.value || '').trim();
+    form.clienteTelefone = (el('invoiceClienteTelefone')?.value || '').trim();
+    form.clienteEndereco = (el('invoiceClienteEndereco')?.value || '').trim();
+    form.invoiceNumber = (el('invoiceNumero')?.value || '').trim();
+    form.invoiceDate = (el('invoiceData')?.value || form.invoiceDate || getDefaultInvoiceForm().invoiceDate);
+    form.moeda = normalizarMoedaLocal(el('invoiceMoeda')?.value || form.moeda || 'USD');
+    form.paymentTerms = (el('invoicePaymentTerms')?.value || form.paymentTerms || '').trim();
+    form.deliveryTerms = (el('invoiceDeliveryTerms')?.value || form.deliveryTerms || '').trim();
+    form.observacoes = (el('invoiceObservacoes')?.value || '').trim();
+    form.bankName = (el('invoiceBankName')?.value || '').trim();
+    form.bankSwift = (el('invoiceBankSwift')?.value || '').trim();
+    form.bankBranch = (el('invoiceBankBranch')?.value || '').trim();
+    form.bankAccount = (el('invoiceBankAccount')?.value || '').trim();
+    form.bankBeneficiary = (el('invoiceBankBeneficiary')?.value || '').trim();
+    form.bankBeneficiaryAddress = (el('invoiceBankBeneficiaryAddress')?.value || '').trim();
+    form.intermediaryBank = (el('invoiceIntermediaryBank')?.value || '').trim();
+    form.intermediarySwift = (el('invoiceIntermediarySwift')?.value || '').trim();
+    form.desconto = toNumber(el('invoiceDesconto')?.value ?? form.desconto);
+    form.frete = toNumber(el('invoiceFrete')?.value ?? form.frete);
+    form.countryOfOrigin = (el('invoicePaisOrigem')?.value || form.countryOfOrigin || '').trim();
+    form.hsCode = (el('invoiceHsCode')?.value || form.hsCode || '').trim();
+    form.deliveryInfo = (el('invoiceDeliveryInfo')?.value || form.deliveryInfo || '').trim();
+    return form;
+  };
+
+  const preencherDadosClienteInvoice = clienteId => {
+    prepararEstadoInvoice();
+    const form = state.invoiceForm;
+    form.clienteId = clienteId || '';
+    const cliente = state.clientes.find(c => c.id === clienteId);
+    if (cliente) {
+      form.clienteNome = cliente.nome || '';
+      form.clienteTaxId = cliente.documento || '';
+      form.clienteContato = cliente.telefone || '';
+      form.clienteEmail = cliente.email || '';
+      form.clienteTelefone = cliente.telefone || '';
+      form.clienteEndereco = cliente.endereco || '';
+      form.customerNumber = cliente.id || form.customerNumber;
+    } else if (!clienteId) {
+      Object.assign(form, {
+        clienteNome: '',
+        clienteTaxId: '',
+        clienteContato: '',
+        clienteEmail: '',
+        clienteTelefone: '',
+        clienteEndereco: ''
+      });
+    }
+    renderInvoiceForm();
+    setInvoiceStatus('');
+  };
+
+  const atualizarInvoiceCampo = (campo, valor) => {
+    prepararEstadoInvoice();
+    const form = state.invoiceForm;
+    if (campo === 'moeda') {
+      form.moeda = normalizarMoedaLocal(valor);
+      renderInvoiceItens();
+    } else if (campo === 'desconto' || campo === 'frete') {
+      form[campo] = Math.max(0, toNumber(valor));
+    } else {
+      form[campo] = valor;
+    }
+    if (['moeda', 'desconto', 'frete'].includes(campo)) {
+      calcularInvoiceResumo();
+    }
+  };
+
+  const numberToWordsEN = num => {
+    const units = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+    const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+    const scales = ['', 'thousand', 'million', 'billion'];
+
+    if (num === 0) return 'zero';
+
+    const chunkToWords = value => {
+      let words = [];
+      const hundred = Math.floor(value / 100);
+      const remainder = value % 100;
+      if (hundred) {
+        words.push(`${units[hundred]} hundred`);
+      }
+      if (remainder) {
+        if (remainder < 20) {
+          words.push(units[remainder]);
+        } else {
+          const ten = Math.floor(remainder / 10);
+          const unit = remainder % 10;
+          words.push(tens[ten] + (unit ? `-${units[unit]}` : ''));
+        }
+      }
+      return words.join(' ');
+    };
+
+    const parts = [];
+    let remaining = num;
+    let scaleIndex = 0;
+    while (remaining > 0 && scaleIndex < scales.length) {
+      const chunk = remaining % 1000;
+      if (chunk) {
+        const chunkWords = chunkToWords(chunk);
+        const scale = scales[scaleIndex];
+        parts.unshift(scale ? `${chunkWords} ${scale}` : chunkWords);
+      }
+      remaining = Math.floor(remaining / 1000);
+      scaleIndex += 1;
+    }
+    return parts.join(' ');
+  };
+
+  const gerarValorPorExtenso = (valor, moeda = 'USD') => {
+    const currencyLabel = moeda === 'BRL' ? 'reais' : 'dollars';
+    const centsLabel = moeda === 'BRL' ? 'centavos' : 'cents';
+    const absoluto = Math.abs(valor);
+    const inteiro = Math.floor(absoluto);
+    const centavos = Math.round((absoluto - inteiro) * 100);
+    const inteiroTexto = numberToWordsEN(inteiro);
+    const centavosTexto = centavos ? numberToWordsEN(centavos) : '';
+    const partes = [];
+    if (inteiroTexto && inteiroTexto !== 'zero') {
+      partes.push(`${inteiroTexto} ${currencyLabel}`);
+    } else {
+      partes.push(`zero ${currencyLabel}`);
+    }
+    if (centavosTexto) {
+      partes.push(`${centavosTexto} ${centsLabel}`);
+    }
+    const prefixo = valor < 0 ? 'negative ' : '';
+    return (prefixo + partes.join(' and ')).toUpperCase();
+  };
+
+  const renderInvoiceItens = () => {
+    const container = el('invoiceItensContainer');
+    if (!container) return;
+    if (!state.invoiceItens.length) {
+      container.innerHTML = '<div class="resumo-item resumo-item-empty" data-empty-invoice>Utilize o botão abaixo para adicionar até 3 itens/serviços.</div>';
+      return;
+    }
+    const moeda = state.invoiceForm?.moeda || 'USD';
+    container.innerHTML = state.invoiceItens.map((item, index) => {
+      const disabledRemove = state.invoiceItens.length === 1 ? 'disabled' : '';
+      const qty = item.quantity ?? '';
+      const unitPrice = item.unitPrice ?? '';
+      return `
+        <div class="invoice-item-card">
+          <div class="invoice-item-header">
+            <span>Item ${index + 1}</span>
+            <button type="button" class="cotacao-item-remove" ${disabledRemove} onclick="removerInvoiceItem('${item.uid}')">🗑️</button>
+          </div>
+          <label class="form-label">Part Number</label>
+          <input type="text" class="form-input" value="${escapeHtml(item.partNumber || '')}" oninput="atualizarInvoiceItemCampo('${item.uid}', 'partNumber', this.value)">
+          <label class="form-label">Descrição</label>
+          <textarea class="form-textarea" rows="2" oninput="atualizarInvoiceItemCampo('${item.uid}', 'description', this.value)">${escapeHtml(item.description || '')}</textarea>
+          <div class="grid-3" style="margin-top: 10px;">
+            <div class="form-group" style="margin:0;">
+              <label class="form-label">Quantidade</label>
+              <input type="number" class="form-input" min="0" step="0.01" value="${qty}" oninput="atualizarInvoiceItemCampo('${item.uid}', 'quantity', this.value)">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label class="form-label">Unidade</label>
+              <input type="text" class="form-input" value="${escapeHtml(item.unit || '')}" oninput="atualizarInvoiceItemCampo('${item.uid}', 'unit', this.value)">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label class="form-label">Preço Unit. (${moeda})</label>
+              <input type="number" class="form-input" min="0" step="0.01" value="${unitPrice}" oninput="atualizarInvoiceItemCampo('${item.uid}', 'unitPrice', this.value)">
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  };
+
+  const adicionarInvoiceItem = () => {
+    if (!temInvoiceUI()) return;
+    if (state.invoiceItens.length >= MAX_INVOICE_ITENS) {
+      alert('É possível adicionar no máximo 3 itens na mesma invoice.');
+      return;
+    }
+    state.invoiceItens.push(novoInvoiceItem());
+    renderInvoiceItens();
+    calcularInvoiceResumo();
+  };
+
+  const removerInvoiceItem = uid => {
+    if (!temInvoiceUI()) return;
+    state.invoiceItens = state.invoiceItens.filter(item => item.uid !== uid);
+    if (state.invoiceItens.length === 0) {
+      state.invoiceItens = [novoInvoiceItem()];
+    }
+    renderInvoiceItens();
+    calcularInvoiceResumo();
+  };
+
+  const atualizarInvoiceItemCampo = (uid, campo, valor) => {
+    if (!temInvoiceUI()) return;
+    const item = state.invoiceItens.find(it => it.uid === uid);
+    if (!item) return;
+    item[campo] = valor;
+    calcularInvoiceResumo();
+  };
+
+  const calcularInvoiceResumo = () => {
+    if (!temInvoiceUI()) return;
+    const form = coletarInvoiceFormDoDom();
+    const moeda = form.moeda || 'USD';
+    const subtotal = state.invoiceItens.reduce((acc, item) => {
+      const qty = toNumber(item.quantity);
+      const price = toNumber(item.unitPrice);
+      if (qty <= 0 || price <= 0) return acc;
+      return acc + (qty * price);
+    }, 0);
+    const desconto = Math.min(Math.max(0, toNumber(form.desconto)), subtotal);
+    const frete = Math.max(0, toNumber(form.frete));
+    const total = subtotal - desconto + frete;
+    form.desconto = desconto;
+    form.frete = frete;
+    form.amountInWords = gerarValorPorExtenso(total, moeda);
+    setText('invoiceResumoSubtotal', formatCurrencyByMoeda(subtotal, moeda));
+    setText('invoiceResumoDesconto', formatCurrencyByMoeda(desconto, moeda));
+    setText('invoiceResumoFrete', formatCurrencyByMoeda(frete, moeda));
+    setText('invoiceResumoTotal', formatCurrencyByMoeda(total, moeda));
+    setText('invoiceResumoExtenso', total ? form.amountInWords : '--');
+  };
+
+  const montarPayloadInvoice = () => {
+    const form = coletarInvoiceFormDoDom();
+    const itensValidos = state.invoiceItens
+      .map(item => ({
+        partNumber: (item.partNumber || '').trim(),
+        description: (item.description || '').trim(),
+        quantity: toNumber(item.quantity),
+        unit: (item.unit || 'PCS').trim() || 'PCS',
+        unitPrice: toNumber(item.unitPrice)
+      }))
+      .filter(item => item.description && item.quantity > 0 && item.unitPrice > 0)
+      .slice(0, MAX_INVOICE_ITENS);
+    if (!itensValidos.length) {
+      throw new Error('Inclua ao menos um item com quantidade e preço.');
+    }
+    if (!form.clienteNome) {
+      throw new Error('Preencha os dados do cliente para a invoice.');
+    }
+    const subtotal = itensValidos.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+    const desconto = Math.min(Math.max(0, toNumber(form.desconto)), subtotal);
+    const frete = Math.max(0, toNumber(form.frete));
+    const total = subtotal - desconto + frete;
+    const amountInWords = gerarValorPorExtenso(total, form.moeda);
+
+    form.desconto = desconto;
+    form.frete = frete;
+    form.amountInWords = amountInWords;
+
+    return {
+      clienteId: form.clienteId || undefined,
+      customerName: form.clienteNome,
+      customerAddressLine1: form.clienteEndereco,
+      customerAddressLine2: '',
+      customerCityState: '',
+      customerCountry: '',
+      customerTaxId: form.clienteTaxId,
+      customerEmail: form.clienteEmail,
+      customerPhone: form.clienteTelefone || form.clienteContato,
+      invoiceNumber: form.invoiceNumber,
+      invoiceDate: form.invoiceDate || getDefaultInvoiceForm().invoiceDate,
+      customerNumber: form.customerNumber || form.clienteId,
+      paymentTerms: form.paymentTerms || 'Prepayment',
+      deliveryTerms: form.deliveryTerms || 'FOB',
+      items: itensValidos,
+      discount: desconto,
+      shipping: frete,
+      countryOfOrigin: form.countryOfOrigin,
+      hsCode: form.hsCode,
+      deliveryInfo: form.deliveryInfo,
+      shippingMethod: form.shippingMethod || form.deliveryInfo || 'Standard',
+      bankName: form.bankName,
+      swiftCode: form.bankSwift,
+      bankBranch: form.bankBranch,
+      beneficiaryAccount: form.bankAccount,
+      iban: form.bankAccount,
+      beneficiaryName: form.bankBeneficiary,
+      beneficiaryAddress: form.bankBeneficiaryAddress,
+      intermediaryBank: form.intermediaryBank,
+      intermediarySwift: form.intermediarySwift,
+      acknowledgementText: form.observacoes,
+      signatureName: state.user?.nome || 'Zenith Pay',
+      extraNotes: form.observacoes ? [form.observacoes] : [],
+      amountInWords,
+      moeda: form.moeda
+    };
+  };
+
+  const limparInvoiceForm = () => {
+    resetarInvoice();
+    renderInvoiceForm();
+    renderInvoiceItens();
+    calcularInvoiceResumo();
+    setInvoiceStatus('');
+  };
+
+  const gerarInvoice = async () => {
+    if (!temInvoiceUI()) return;
+    if (!isAdminUser()) {
+      setInvoiceStatus('Apenas administradores podem gerar invoices.', 'error');
+      return;
+    }
+    let payload;
+    try {
+      payload = montarPayloadInvoice();
+    } catch (error) {
+      setInvoiceStatus(error.message || 'Erro ao preparar invoice.', 'error');
+      return;
+    }
+    setInvoiceStatus('Gerando invoice em PDF...', '');
+    try {
+      const blob = await apiRequest('/invoices/generate', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        responseType: 'blob'
+      });
+      const nomeArquivoBase = (payload.invoiceNumber || 'invoice-zenith')
+        .toString()
+        .trim()
+        .replace(/[^a-z0-9-_]+/gi, '-')
+        .replace(/^-+|-+$/g, '') || 'invoice-zenith';
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${nomeArquivoBase}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setInvoiceStatus('Invoice gerada com sucesso! O download foi iniciado.', 'success');
+    } catch (error) {
+      setInvoiceStatus(error.message || 'Erro ao gerar invoice.', 'error');
+    }
+  };
+
   const renderClientes = () => {
     const select = el('cotacaoCliente');
     if (select) {
@@ -626,6 +1117,7 @@
         select.appendChild(option);
       });
     }
+    atualizarSelectClientesInvoice();
     const tabela = el('tabelaClientes');
     if (!tabela) return;
     const cotacoesVisiveis = getCotacoesVisiveis();
@@ -1001,6 +1493,12 @@
       renderKycLista();
     }
     await Promise.all(tarefas);
+    if (temInvoiceUI()) {
+      prepararEstadoInvoice();
+      renderInvoiceForm();
+      renderInvoiceItens();
+      calcularInvoiceResumo();
+    }
   };
 
   const restaurarSessao = async () => {
@@ -1012,6 +1510,7 @@
       const data = await apiRequest('/me');
       if (data?.user) {
         saveSession(state.token, data.user);
+        resetarInvoice();
         await carregarDados();
         showApp();
         iniciarAtualizacaoTicker();
@@ -1037,6 +1536,7 @@
         body: JSON.stringify({ identifier: user, password: pass })
       });
       saveSession(data.token, data.user);
+      resetarInvoice();
       await carregarDados();
       showApp();
       iniciarAtualizacaoTicker();
@@ -1070,6 +1570,12 @@
     if (section) section.classList.add('active');
     if (tabName === 'kyc' && isAdminUser()) {
       listarKyc();
+    }
+    if (tabName === 'invoice') {
+      renderInvoiceForm();
+      renderInvoiceItens();
+      calcularInvoiceResumo();
+      setInvoiceStatus('');
     }
   };
 
@@ -1691,7 +2197,14 @@
     listarKyc,
     atualizarKycStatus,
     abrirKycDocumentos,
-    fecharKycDocumentos
+    fecharKycDocumentos,
+    preencherDadosClienteInvoice,
+    atualizarInvoiceCampo,
+    adicionarInvoiceItem,
+    removerInvoiceItem,
+    atualizarInvoiceItemCampo,
+    limparInvoiceForm,
+    gerarInvoice
   };
 
   Object.assign(window, exported);
@@ -1703,6 +2216,10 @@
 
   definirPermissoesPadraoForm();
   calcularCotacao();
+  renderInvoiceForm();
+  renderInvoiceItens();
+  calcularInvoiceResumo();
+  setInvoiceStatus('');
   restaurarSessao();
   iniciarAtualizacaoTicker();
 })();
