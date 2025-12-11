@@ -210,6 +210,61 @@ const truncateText = (text, maxLength, suffix = '...') => {
   return str.substring(0, maxLength - suffix.length) + suffix;
 };
 
+const normalizeInvoiceLang = (value) => {
+  const v = (value || '').toString().trim().toLowerCase();
+  return v === 'en' ? 'en' : 'pt';
+};
+
+const getInvoiceText = (lang = 'pt') => {
+  const isEn = lang === 'en';
+  return {
+    recipientTitle: isEn ? 'RECIPIENT' : 'DESTINATÁRIO',
+    taxIdLabel: isEn ? 'Tax ID:' : 'CNPJ / Tax ID:',
+    emailLabel: 'Email:',
+    phoneLabel: isEn ? 'Phone:' : 'Telefone:',
+    contactLabel: isEn ? 'Contact:' : 'Contato:',
+    details: {
+      invoiceNumber: isEn ? 'Invoice No' : 'Fatura Nº',
+      date: isEn ? 'Date' : 'Data',
+      customerNumber: isEn ? 'Customer No' : 'Cliente Nº',
+      payment: isEn ? 'Payment' : 'Pagamento',
+      delivery: isEn ? 'Delivery Terms' : 'Termos de Entrega'
+    },
+    tableHeaders: isEn
+      ? ['Item', 'Product Code', 'Description', 'Quantity', 'Unit Price (USD)', 'Total (USD)']
+      : ['Item', 'Cód. Produto', 'Descrição', 'Quantidade', 'Preço Unit. (USD)', 'Total (USD)'],
+    totals: {
+      subtotal: isEn ? 'Subtotal' : 'Subtotal',
+      discount: isEn ? 'Discount' : 'Desconto',
+      shipping: isEn ? 'Shipping' : 'Frete',
+      totalLabel: isEn ? 'TOTAL:' : 'TOTAL:'
+    },
+    amountInWordsPrefix: isEn ? '(SAY ' : '(DIGA-SE ',
+    additional: {
+      country: isEn ? 'COUNTRY OF ORIGIN:' : 'PAÍS DE ORIGEM:',
+      hsCode: isEn ? 'HS CODE:' : 'CÓDIGO HS:',
+      deliveryInfo: isEn ? 'DELIVERY INFORMATION:' : 'INFORMAÇÕES DE ENTREGA:',
+      shippingMethod: isEn ? 'Shipping Method:' : 'Método de Envio:'
+    },
+    bank: {
+      title: isEn ? 'PAYMENT INSTRUCTIONS:' : 'INSTRUÇÕES DE PAGAMENTO:'
+    },
+    legal: {
+      romalpa: isEn ? 'ROMALPA CLAUSE:' : 'CLÁUSULA ROMALPA:',
+      legalDeclarations: isEn ? 'LEGAL DECLARATIONS:' : 'DECLARAÇÕES LEGAIS:',
+      terms: isEn ? 'TERMS AND CONDITIONS:' : 'TERMOS E CONDIÇÕES:'
+    },
+    signatures: {
+      left1: isEn ? 'Goods received in good condition' : 'Mercadorias recebidas em boas condições',
+      left2: isEn ? 'Goods sold are not returnable' : 'Mercadorias vendidas não são retornáveis',
+      right1: isEn ? 'On behalf of' : 'Em Nome de',
+      right2: 'Zenith Pay',
+      stampLeft: isEn ? 'Stamp and Signature' : 'Carimbo e Assinatura',
+      stampRight: isEn ? 'STAMP AND SIGNATURE' : 'CARIMBO E ASSINATURA'
+    }
+  };
+};
+
 const buildClienteDataFromInvoice = (body = {}) => {
   const base = {
     nome: sanitizeText(body.nome || body.customerName, ''),
@@ -393,7 +448,8 @@ const buildInvoicePayload = payload => {
         total: toCurrency(total)
       },
       amountInWords: numberToWordsUSD(total)
-    }
+    },
+    lang: normalizeInvoiceLang(payload.language)
   };
 };
 
@@ -418,6 +474,7 @@ const renderInvoicePdf = (res, invoice) => {
     doc.lineWidth(width).strokeColor(color).moveTo(x1, y1).lineTo(x2, y2).stroke();
     doc.restore();
   };
+  const t = getInvoiceText(invoice.lang);
 
   // Header
   doc.font('Helvetica-Bold').fontSize(22).text(invoice.company.name || 'ZENITH PAY', startX, doc.y, { align: 'center', width: pageWidth });
@@ -442,7 +499,7 @@ const renderInvoicePdf = (res, invoice) => {
   const leftWidth = (pageWidth - gap) * 0.52;
   const rightWidth = pageWidth - gap - leftWidth;
 
-  doc.font('Helvetica-Bold').fontSize(11).fillColor('#000').text('DESTINATÁRIO', startX, infoTop, { width: leftWidth });
+  doc.font('Helvetica-Bold').fontSize(11).fillColor('#000').text(t.recipientTitle, startX, infoTop, { width: leftWidth });
   doc.moveDown(0.4);
   doc.font('Helvetica').fontSize(10);
   const recipientLines = [
@@ -451,10 +508,10 @@ const renderInvoicePdf = (res, invoice) => {
     invoice.customer.addressLine2 || '',
     invoice.customer.cityState || '',
     invoice.customer.country || '',
-    `CNPJ / Tax ID: ${invoice.customer.taxId || '-'}`,
-    `Email: ${invoice.customer.email || '-'}`,
-    `Telefone: ${invoice.customer.phone || '-'}`,
-    invoice.customer.contact ? `Contato: ${invoice.customer.contact}` : ''
+    `${t.taxIdLabel} ${invoice.customer.taxId || '-'}`,
+    `${t.emailLabel} ${invoice.customer.email || '-'}`,
+    `${t.phoneLabel} ${invoice.customer.phone || '-'}`,
+    invoice.customer.contact ? `${t.contactLabel} ${invoice.customer.contact}` : ''
   ].filter(Boolean);
   recipientLines.forEach(text => doc.text(text, { width: leftWidth, lineGap: 2 }));
   const leftBottom = doc.y;
@@ -495,29 +552,29 @@ const renderInvoicePdf = (res, invoice) => {
 
   // Linha 1: Fatura Nº | Data
   doc.font('Helvetica-Bold').fontSize(9);
-  doc.text('Fatura Nº:', col1X, rowY, { width: colW, continued: true });
+  doc.text(`${t.details.invoiceNumber}:`, col1X, rowY, { width: colW, continued: true });
   doc.font('Helvetica').text(' ' + invoiceNum, { width: colW });
 
   doc.font('Helvetica-Bold').fontSize(9);
-  doc.text('Data:', col2X, rowY, { width: colW, continued: true });
+  doc.text(`${t.details.date}:`, col2X, rowY, { width: colW, continued: true });
   doc.font('Helvetica').text(' ' + invoiceDate, { width: colW });
 
   rowY += lineH;
 
   // Linha 2: Cliente Nº | Pagamento
   doc.font('Helvetica-Bold').fontSize(9);
-  doc.text('Cliente Nº:', col1X, rowY, { width: colW, continued: true });
+  doc.text(`${t.details.customerNumber}:`, col1X, rowY, { width: colW, continued: true });
   doc.font('Helvetica').text(' ' + customerNum, { width: colW });
 
   doc.font('Helvetica-Bold').fontSize(9);
-  doc.text('Pagamento:', col2X, rowY, { width: colW, continued: true });
+  doc.text(`${t.details.payment}:`, col2X, rowY, { width: colW, continued: true });
   doc.font('Helvetica').text(' ' + paymentTerms, { width: colW });
 
   rowY += lineH;
 
   // Linha 3: Entrega (ocupa toda linha)
   doc.font('Helvetica-Bold').fontSize(9);
-  doc.text('Entrega:', col1X, rowY, { width: colW, continued: true });
+  doc.text(`${t.details.delivery}:`, col1X, rowY, { width: colW, continued: true });
   doc.font('Helvetica').text(' ' + deliveryTerms, { width: boxWidth - boxPad * 2 });
 
   doc.y = Math.max(leftBottom, boxTop + boxHeight) + 18;
@@ -532,7 +589,7 @@ const renderInvoicePdf = (res, invoice) => {
     const headerHeight = 24;
     doc.rect(startX, tableTop, pageWidth, headerHeight).fillAndStroke('#f5f5f5', '#000');
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(10);
-    ['Item', 'Cód. Produto', 'Descrição', 'Quantidade', 'Preço Unit. (USD)', 'Total (USD)'].forEach((text, idx) => {
+    t.tableHeaders.forEach((text, idx) => {
       doc.text(text, colX[idx] + 6, tableTop + 8, { width: colWidths[idx] - 12, align: idx === 0 ? 'center' : idx >= 4 ? 'right' : 'left' });
     });
     let rowY = tableTop + headerHeight;
@@ -559,7 +616,7 @@ const renderInvoicePdf = (res, invoice) => {
   const totalsValueW = 150;
   const totalsStartX = startX + pageWidth - (totalsLabelW + totalsValueW);
   doc.font('Helvetica').fontSize(10);
-  [['Subtotal', invoice.totals.subtotal], ['Desconto', invoice.totals.discount], ['Frete', invoice.totals.shipping]].forEach(([label, val]) => {
+  [[t.totals.subtotal, invoice.totals.subtotal], [t.totals.discount, invoice.totals.discount], [t.totals.shipping, invoice.totals.shipping]].forEach(([label, val]) => {
     doc.text(label, totalsStartX, doc.y, { width: totalsLabelW, align: 'right' });
     doc.font('Helvetica-Bold').text(formatMoney(val), totalsStartX + totalsLabelW, doc.y, { width: totalsValueW, align: 'right' });
     doc.moveDown(0.3);
@@ -568,26 +625,26 @@ const renderInvoicePdf = (res, invoice) => {
   doc.font('Helvetica-Bold').fontSize(12);
   const grandStartY = doc.y + 3;
   line(totalsStartX, grandStartY, startX + pageWidth, grandStartY, 2);
-  doc.text('TOTAL:', totalsStartX, grandStartY + 5, { width: totalsLabelW, align: 'right' });
+  doc.text(t.totals.totalLabel, totalsStartX, grandStartY + 5, { width: totalsLabelW, align: 'right' });
   doc.text(formatMoney(invoice.totals.total), totalsStartX + totalsLabelW, grandStartY + 5, { width: totalsValueW, align: 'right' });
   line(totalsStartX, grandStartY + 22, startX + pageWidth, grandStartY + 22, 3);
   doc.y = grandStartY + 30;
-  doc.font('Helvetica-Oblique').fontSize(9).text(`( ${invoice.totals?.amountInWords || 'VALOR NÃO ESPECIFICADO'})`, startX, doc.y, { width: pageWidth, align: 'right' });
+  doc.font('Helvetica-Oblique').fontSize(9).text(`${t.amountInWordsPrefix}${invoice.totals?.amountInWords || 'VALOR NÃO ESPECIFICADO'})`, startX, doc.y, { width: pageWidth, align: 'right' });
   doc.moveDown(1);
 
   // Additional info
-  doc.font('Helvetica-Bold').fontSize(9).text('PAÍS DE ORIGEM:', startX, doc.y, { width: pageWidth });
+  doc.font('Helvetica-Bold').fontSize(9).text(t.additional.country, startX, doc.y, { width: pageWidth });
   doc.font('Helvetica').fontSize(9).text(invoice.logistic.countryOfOrigin || '-', { width: pageWidth, lineGap: 1 });
   doc.moveDown(0.4);
 
-  doc.font('Helvetica-Bold').text('CÓDIGO HS:', startX, doc.y, { width: pageWidth });
+  doc.font('Helvetica-Bold').text(t.additional.hsCode, startX, doc.y, { width: pageWidth });
   doc.font('Helvetica').text(invoice.logistic.hsCode || '-', { width: pageWidth, lineGap: 1 });
   doc.moveDown(0.4);
 
-  doc.font('Helvetica-Bold').text('INFORMAÇÕES DE ENTREGA:', startX, doc.y, { width: pageWidth });
+  doc.font('Helvetica-Bold').text(t.additional.deliveryInfo, startX, doc.y, { width: pageWidth });
   doc.font('Helvetica').text(invoice.logistic.deliveryInfo || '-', { width: pageWidth, lineGap: 1 });
   if (invoice.logistic.shippingMethod) {
-    doc.text(`Método de Envio: ${invoice.logistic.shippingMethod}`, { width: pageWidth, lineGap: 1 });
+    doc.text(`${t.additional.shippingMethod} ${invoice.logistic.shippingMethod}`, { width: pageWidth, lineGap: 1 });
   }
   doc.moveDown(0.6);
 
@@ -619,7 +676,7 @@ const renderInvoicePdf = (res, invoice) => {
   // AGORA renderizar conteúdo DENTRO do box
   doc.fillColor('#000');
   doc.font('Helvetica-Bold').fontSize(9).text(
-    'INSTRUÇÕES DE PAGAMENTO:',
+    t.bank.title,
     startX + bankPadding,
     bankTop + bankPadding
   );
@@ -642,13 +699,13 @@ const renderInvoicePdf = (res, invoice) => {
   doc.y = bankTop + bankHeight + 10;
 
   // Legal text
-  doc.font('Helvetica-Bold').fontSize(8).text('CLÁUSULA ROMALPA:');
+  doc.font('Helvetica-Bold').fontSize(8).text(t.legal.romalpa);
   doc.font('Helvetica').fontSize(8).fillColor('#333').text(INVOICE_DEFAULTS.romalpaClause, { lineGap: 1 });
   doc.moveDown(0.3);
-  doc.font('Helvetica-Bold').fillColor('#000').text('DECLARAÇÕES LEGAIS:');
+  doc.font('Helvetica-Bold').fillColor('#000').text(t.legal.legalDeclarations);
   doc.font('Helvetica').fillColor('#333').text(invoice.acknowledgement || 'Mercadorias recebidas em boas condições. Mercadorias vendidas não são retornáveis.', { lineGap: 1 });
   doc.moveDown(0.3);
-  doc.font('Helvetica-Bold').fillColor('#000').text('TERMOS E CONDIÇÕES:');
+  doc.font('Helvetica-Bold').fillColor('#000').text(t.legal.terms);
   INVOICE_DEFAULTS.terms.forEach(term => {
     doc.font('Helvetica').fillColor('#333').text(`• ${term}`, { lineGap: 1 });
   });
@@ -668,23 +725,23 @@ const renderInvoicePdf = (res, invoice) => {
 
   // Assinatura esquerda
   doc.font('Helvetica').fontSize(8);
-  doc.text('Mercadorias recebidas em boas condições', leftSigX, sigTop, {
+  doc.text(t.signatures.left1, leftSigX, sigTop, {
     width: sigWidth,
     align: 'center'
   });
-  doc.text('Mercadorias vendidas não são retornáveis', leftSigX, doc.y, {
+  doc.text(t.signatures.left2, leftSigX, doc.y, {
     width: sigWidth,
     align: 'center'
   });
 
   // Assinatura direita
   const rightTopY = sigTop;
-  doc.text('Em Nome de', rightSigX, rightTopY, {
+  doc.text(t.signatures.right1, rightSigX, rightTopY, {
     width: sigWidth,
     align: 'center'
   });
   doc.font('Helvetica-Bold');
-  doc.text('Zenith Pay', rightSigX, doc.y, {
+  doc.text(t.signatures.right2, rightSigX, doc.y, {
     width: sigWidth,
     align: 'center'
   });
@@ -695,11 +752,11 @@ const renderInvoicePdf = (res, invoice) => {
   line(rightSigX + 20, sigLineY, rightSigX + sigWidth - 20, sigLineY, 1);
 
   doc.font('Helvetica').fontSize(7);
-  doc.text('Carimbo e Assinatura', leftSigX, sigLineY + 5, {
+  doc.text(t.signatures.stampLeft, leftSigX, sigLineY + 5, {
     width: sigWidth,
     align: 'center'
   });
-  doc.text('CARIMBO E ASSINATURA', rightSigX, sigLineY + 5, {
+  doc.text(t.signatures.stampRight, rightSigX, sigLineY + 5, {
     width: sigWidth,
     align: 'center'
   });
