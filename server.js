@@ -462,46 +462,65 @@ const renderInvoicePdf = (res, invoice) => {
   // Details box
   const boxX = startX + leftWidth + gap;
   const boxPad = 12;
-  const labelW = 110;
   const boxTop = infoTop;
-  const detailFields = [
-    ['Fatura Nº', invoice.invoice.number],
-    ['Data', invoice.invoice.date],
-    ['Cliente Nº', invoice.invoice.customerNumber || '-'],
-    ['Condições de Pagamento', invoice.invoice.paymentTerms],
-    ['Termos de Entrega', invoice.invoice.deliveryTerms]
-  ];
+  const boxWidth = rightWidth;
 
-  let totalHeight = boxPad * 2;
-  const fieldHeights = [];
+  // Preparar dados com simplificações
+  const invoiceNum = truncateText(invoice.invoice.number || '-', 20);
+  const invoiceDate = invoice.invoice.date || '-';
 
-  detailFields.forEach(([label, value]) => {
-    const valueWidth = rightWidth - boxPad * 2 - labelW - 6;
-    const valueHeight = doc.heightOfString(value || '-', {
-      width: valueWidth,
-      align: 'right'
-    });
-    const fieldHeight = Math.max(16, valueHeight + 4);
-    fieldHeights.push(fieldHeight);
-    totalHeight += fieldHeight + 2;
-  });
+  // Simplificar Cliente Nº - pegar apenas primeiros 8 chars se for UUID
+  let customerNum = invoice.invoice.customerNumber || '-';
+  if (customerNum.length > 20 && customerNum.includes('-')) {
+    customerNum = customerNum.split('-')[0];
+  }
 
-  const boxHeight = Math.max(130, totalHeight);
-  doc.rect(boxX, boxTop, rightWidth, boxHeight).lineWidth(2).stroke();
+  const paymentTerms = truncateText(invoice.invoice.paymentTerms || 'Prepayment', 25);
+  const deliveryTerms = truncateText(invoice.invoice.deliveryTerms || 'FOB', 15);
 
-  let cursorY = boxTop + boxPad;
-  detailFields.forEach(([label, value], index) => {
-    const valueWidth = rightWidth - boxPad * 2 - labelW - 6;
-    doc.font('Helvetica-Bold').fontSize(9).text(label, boxX + boxPad, cursorY, { width: labelW });
-    doc.font('Helvetica').fontSize(9).text(value || '-', boxX + boxPad + labelW + 6, cursorY, {
-      width: valueWidth,
-      align: 'right',
-      lineGap: 1
-    });
-    cursorY += fieldHeights[index] + 2;
-  });
+  // Calcular altura - 3 linhas fixas
+  const lineH = 18;
+  const numLines = 3;
+  const boxHeight = boxPad * 2 + numLines * lineH;
 
-  doc.y = Math.max(leftBottom, boxTop + boxHeight) + 20;
+  // Desenhar box
+  doc.rect(boxX, boxTop, boxWidth, boxHeight).lineWidth(2).stroke();
+
+  // Layout de 2 colunas
+  const col1X = boxX + boxPad;
+  const col2X = boxX + (boxWidth / 2);
+  const colW = (boxWidth / 2) - boxPad * 1.5;
+
+  let rowY = boxTop + boxPad;
+
+  // Linha 1: Fatura Nº | Data
+  doc.font('Helvetica-Bold').fontSize(9);
+  doc.text('Fatura Nº:', col1X, rowY, { width: colW, continued: true });
+  doc.font('Helvetica').text(' ' + invoiceNum, { width: colW });
+
+  doc.font('Helvetica-Bold').fontSize(9);
+  doc.text('Data:', col2X, rowY, { width: colW, continued: true });
+  doc.font('Helvetica').text(' ' + invoiceDate, { width: colW });
+
+  rowY += lineH;
+
+  // Linha 2: Cliente Nº | Pagamento
+  doc.font('Helvetica-Bold').fontSize(9);
+  doc.text('Cliente Nº:', col1X, rowY, { width: colW, continued: true });
+  doc.font('Helvetica').text(' ' + customerNum, { width: colW });
+
+  doc.font('Helvetica-Bold').fontSize(9);
+  doc.text('Pagamento:', col2X, rowY, { width: colW, continued: true });
+  doc.font('Helvetica').text(' ' + paymentTerms, { width: colW });
+
+  rowY += lineH;
+
+  // Linha 3: Entrega (ocupa toda linha)
+  doc.font('Helvetica-Bold').fontSize(9);
+  doc.text('Entrega:', col1X, rowY, { width: colW, continued: true });
+  doc.font('Helvetica').text(' ' + deliveryTerms, { width: boxWidth - boxPad * 2 });
+
+  doc.y = Math.max(leftBottom, boxTop + boxHeight) + 18;
 
   // Items table
   const items = invoice.items || [];
@@ -554,7 +573,7 @@ const renderInvoicePdf = (res, invoice) => {
   line(totalsStartX, grandStartY + 22, startX + pageWidth, grandStartY + 22, 3);
   doc.y = grandStartY + 30;
   doc.font('Helvetica-Oblique').fontSize(9).text(`(DIGA-SE ${invoice.totals?.amountInWords || 'VALOR NÃO ESPECIFICADO'})`, startX, doc.y, { width: pageWidth, align: 'right' });
-  doc.moveDown(1.2);
+  doc.moveDown(1);
 
   // Additional info
   doc.font('Helvetica-Bold').fontSize(9).text('PAÍS DE ORIGEM:', startX, doc.y, { width: pageWidth });
@@ -570,7 +589,7 @@ const renderInvoicePdf = (res, invoice) => {
   if (invoice.logistic.shippingMethod) {
     doc.text(`Método de Envio: ${invoice.logistic.shippingMethod}`, { width: pageWidth, lineGap: 1 });
   }
-  doc.moveDown(0.8);
+  doc.moveDown(0.6);
 
   // Bank details
   const bankTop = doc.y;
@@ -597,7 +616,7 @@ const renderInvoicePdf = (res, invoice) => {
   const bankHeight = Math.max(85, bankCursor - bankTop + bankPadding);
   doc.rect(startX, bankTop, pageWidth, bankHeight).fillAndStroke('#f9f9f9', '#ddd');
   doc.strokeColor('#000');
-  doc.y = bankTop + bankHeight + 15;
+  doc.y = bankTop + bankHeight + 12;
 
   // Legal text
   doc.font('Helvetica-Bold').fontSize(8).text('CLÁUSULA ROMALPA:');
@@ -613,24 +632,65 @@ const renderInvoicePdf = (res, invoice) => {
   doc.fillColor('#000');
 
   // Footer signatures
-  doc.moveDown(2);
-  line(startX, doc.y, startX + pageWidth, doc.y, 2);
+  doc.fillColor('#000');
   doc.moveDown(1.5);
+  line(startX, doc.y, startX + pageWidth, doc.y, 2);
+  doc.moveDown(1.2);
+
   const sigTop = doc.y;
-  const sigWidth = 220;
+  const sigWidth = 230;
   const sigGap = pageWidth - sigWidth * 2;
-  const leftSigX = startX;
-  const rightSigX = startX + sigWidth + sigGap;
-  doc.font('Helvetica').fontSize(9).text('Mercadorias recebidas em boas condições\nMercadorias vendidas não são retornáveis', leftSigX, sigTop, { width: sigWidth, align: 'center', lineGap: 2 });
-  doc.text('Em Nome de\nZenith Pay', rightSigX, sigTop, { width: sigWidth, align: 'center', lineGap: 2 });
-  const sigLineY = sigTop + 50;
-  line(leftSigX + 10, sigLineY, leftSigX + sigWidth - 10, sigLineY);
-  line(rightSigX + 10, sigLineY, rightSigX + sigWidth - 10, sigLineY);
-  doc.text('Carimbo e Assinatura', leftSigX, sigLineY + 6, { width: sigWidth, align: 'center' });
-  doc.text('Assinatura Autorizada', rightSigX, sigLineY + 6, { width: sigWidth, align: 'center' });
-  doc.y = sigLineY + 30;
-  doc.moveDown(1);
-  doc.font('Helvetica-Oblique').fontSize(8).fillColor('#666').text('Esta é uma fatura gerada por computador. Nenhuma assinatura necessária.', { align: 'center' });
+  const leftSigX = startX + (sigGap / 4);
+  const rightSigX = leftSigX + sigWidth + (sigGap / 2);
+
+  // Assinatura esquerda
+  doc.font('Helvetica').fontSize(8);
+  doc.text('Mercadorias recebidas em boas condições', leftSigX, sigTop, {
+    width: sigWidth,
+    align: 'center'
+  });
+  doc.text('Mercadorias vendidas não são retornáveis', leftSigX, doc.y, {
+    width: sigWidth,
+    align: 'center'
+  });
+
+  // Assinatura direita
+  const rightTopY = sigTop;
+  doc.text('Em Nome de', rightSigX, rightTopY, {
+    width: sigWidth,
+    align: 'center'
+  });
+  doc.font('Helvetica-Bold');
+  doc.text('Zenith Pay', rightSigX, doc.y, {
+    width: sigWidth,
+    align: 'center'
+  });
+
+  // Linhas de assinatura
+  const sigLineY = sigTop + 45;
+  line(leftSigX + 20, sigLineY, leftSigX + sigWidth - 20, sigLineY, 1);
+  line(rightSigX + 20, sigLineY, rightSigX + sigWidth - 20, sigLineY, 1);
+
+  doc.font('Helvetica').fontSize(7);
+  doc.text('Carimbo e Assinatura', leftSigX, sigLineY + 5, {
+    width: sigWidth,
+    align: 'center'
+  });
+  doc.text('Assinatura Autorizada', rightSigX, sigLineY + 5, {
+    width: sigWidth,
+    align: 'center'
+  });
+
+  doc.y = sigLineY + 25;
+
+  doc.moveDown(0.8);
+  doc.font('Helvetica-Oblique').fontSize(7).fillColor('#666');
+  doc.text(
+    'Esta é uma fatura gerada por computador. Nenhuma assinatura necessária.',
+    startX,
+    doc.y,
+    { align: 'center', width: pageWidth }
+  );
 
   doc.end();
 };
