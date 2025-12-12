@@ -244,7 +244,6 @@
       deliveryInfo: '',
       shippingMethod: 'Standard',
       desconto: 0,
-      frete: 0,
       observacoes: '',
       bankName: '',
       bankSwift: '',
@@ -873,10 +872,6 @@
     form.intermediaryBank = (el('invoiceIntermediaryBank')?.value || '').trim();
     form.intermediarySwift = (el('invoiceIntermediarySwift')?.value || '').trim();
     form.desconto = toNumber(el('invoiceDesconto')?.value ?? form.desconto);
-    form.frete = toNumber(el('invoiceFrete')?.value ?? form.frete);
-    form.countryOfOrigin = (el('invoicePaisOrigem')?.value || form.countryOfOrigin || '').trim();
-    form.hsCode = (el('invoiceHsCode')?.value || form.hsCode || '').trim();
-    form.deliveryInfo = (el('invoiceDeliveryInfo')?.value || form.deliveryInfo || '').trim();
     return form;
   };
 
@@ -1083,14 +1078,11 @@
       return acc + (effectiveQty * price);
     }, 0);
     const desconto = Math.min(Math.max(0, toNumber(form.desconto)), subtotal);
-    const frete = Math.max(0, toNumber(form.frete));
-    const total = subtotal - desconto + frete;
+    const total = subtotal - desconto;
     form.desconto = desconto;
-    form.frete = frete;
     form.amountInWords = gerarValorPorExtenso(total, moeda);
     setText('invoiceResumoSubtotal', formatCurrencyByMoeda(subtotal, moeda));
     setText('invoiceResumoDesconto', formatCurrencyByMoeda(desconto, moeda));
-    setText('invoiceResumoFrete', formatCurrencyByMoeda(frete, moeda));
     setText('invoiceResumoTotal', formatCurrencyByMoeda(total, moeda));
     setText('invoiceResumoExtenso', total ? form.amountInWords : '--');
   };
@@ -1120,8 +1112,7 @@
     }
     const subtotal = services.reduce((sum, s) => sum + s.amount, 0);
     const desconto = Math.min(Math.max(0, toNumber(form.desconto)), subtotal);
-    const frete = Math.max(0, toNumber(form.frete));
-    const total = subtotal - desconto + frete;
+    const total = subtotal - desconto;
     const amountInWords = gerarValorPorExtenso(total, form.moeda);
 
     form.desconto = desconto;
@@ -1146,11 +1137,11 @@
       deliveryTerms: form.deliveryTerms || 'FOB',
       services,
       discount: desconto,
-      shipping: frete,
-      countryOfOrigin: form.countryOfOrigin,
-      hsCode: form.hsCode,
-      deliveryInfo: form.deliveryInfo,
-      shippingMethod: form.shippingMethod || form.deliveryInfo || 'Standard',
+      shipping: 0,
+      countryOfOrigin: undefined,
+      hsCode: undefined,
+      deliveryInfo: undefined,
+      shippingMethod: undefined,
       bankName: form.bankName,
       swiftCode: form.bankSwift,
       bankBranch: form.bankBranch,
