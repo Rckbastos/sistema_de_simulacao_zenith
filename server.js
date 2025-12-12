@@ -367,18 +367,6 @@ const formatUSD = (value) => {
   return `$ ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
-// Helpers for commercial invoice
-const drawLine = (doc, x1, y1, x2, y2, width = 1) => {
-  doc.save();
-  doc.lineWidth(width).moveTo(x1, y1).lineTo(x2, y2).stroke();
-  doc.restore();
-};
-
-const formatUSD = (value) => {
-  const num = Number(value) || 0;
-  return `$ ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
-
 const formatInvoiceNumber = (dateObj, counter) => {
   const year = dateObj.getFullYear();
   const month = String(dateObj.getMonth() + 1).padStart(2, '0');
