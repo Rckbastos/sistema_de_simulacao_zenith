@@ -355,6 +355,30 @@ const numberToWordsUSD = (value) => {
   return result + '';
 };
 
+// Helpers for commercial invoice
+const drawLine = (doc, x1, y1, x2, y2, width = 1) => {
+  doc.save();
+  doc.lineWidth(width).moveTo(x1, y1).lineTo(x2, y2).stroke();
+  doc.restore();
+};
+
+const formatUSD = (value) => {
+  const num = Number(value) || 0;
+  return `$ ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+// Helpers for commercial invoice
+const drawLine = (doc, x1, y1, x2, y2, width = 1) => {
+  doc.save();
+  doc.lineWidth(width).moveTo(x1, y1).lineTo(x2, y2).stroke();
+  doc.restore();
+};
+
+const formatUSD = (value) => {
+  const num = Number(value) || 0;
+  return `$ ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
 const formatInvoiceNumber = (dateObj, counter) => {
   const year = dateObj.getFullYear();
   const month = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -389,6 +413,303 @@ const reserveInvoiceNumber = async (invoiceDate) => {
   });
 };
 
+// Commercial invoice renderer (services-focused)
+const renderCommercialInvoicePdf = (res, data) => {
+  const doc = new PDFDocument({
+    size: 'A4',
+    margin: 40,
+    bufferPages: true
+  });
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename=\"invoice-${data.invoiceNumber || 'document'}.pdf\"`);
+  doc.pipe(res);
+
+  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const startX = doc.page.margins.left;
+  const startY = doc.page.margins.top;
+
+  let headerY = startY;
+
+  // Logo (optional)
+  if (data.logoPath || data.logoBase64) {
+    try {
+      const logoWidth = 100;
+      const logoHeight = 50;
+      if (data.logoBase64) {
+        doc.image(Buffer.from(data.logoBase64, 'base64'), startX, headerY, {
+          fit: [logoWidth, logoHeight],
+          align: 'left'
+        });
+      } else if (data.logoPath) {
+        doc.image(data.logoPath, startX, headerY, {
+          fit: [logoWidth, logoHeight],
+          align: 'left'
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao carregar logo:', error);
+    }
+  }
+
+  // Title
+  doc.font('Helvetica-Bold').fontSize(20).fillColor('#000');
+  doc.text('COMMERCIAL INVOICE', startX, headerY, {
+    width: pageWidth,
+    align: 'right'
+  });
+
+  doc.moveDown(0.3);
+  doc.font('Helvetica').fontSize(10);
+  doc.text(`Invoice No.: ${data.invoiceNumber || '-'}`, startX, doc.y, {
+    width: pageWidth,
+    align: 'right'
+  });
+  doc.text(`Issue Date: ${data.issueDate || '-'}`, startX, doc.y, {
+    width: pageWidth,
+    align: 'right'
+  });
+  doc.moveDown(1.5);
+
+  // Section 1: Exporter
+  let currentY = doc.y;
+  doc.font('Helvetica-Bold').fontSize(11);
+  doc.text('1. EXPORTER', startX, currentY);
+  currentY = doc.y + 3;
+  drawLine(doc, startX, currentY, startX + pageWidth, currentY, 1);
+  currentY += 10;
+
+  doc.font('Helvetica-Bold').fontSize(9);
+  doc.text(data.exporter.company || '', startX, currentY);
+  currentY = doc.y + 2;
+  doc.font('Helvetica').fontSize(9);
+  if (data.exporter.address) {
+    doc.text(data.exporter.address, startX, currentY, { width: pageWidth });
+    currentY = doc.y + 2;
+  }
+  if (data.exporter.phone) {
+    doc.text(`Tel: ${data.exporter.phone}`, startX, currentY);
+    currentY = doc.y;
+  }
+  currentY += 15;
+
+  // Section 2: Payer and Bank
+  doc.font('Helvetica-Bold').fontSize(11);
+  doc.text('2. PAYER AND BANK DETAILS', startX, currentY);
+  currentY = doc.y + 3;
+  drawLine(doc, startX, currentY, startX + pageWidth, currentY, 1);
+  currentY += 10;
+
+  const col1Width = (pageWidth / 2) - 15;
+  const col2X = startX + col1Width + 30;
+  const col2Width = pageWidth - col1Width - 30;
+  const sectionStartY = currentY;
+
+  let col1Y = sectionStartY;
+  doc.font('Helvetica-Bold').fontSize(10);
+  doc.text('BILL TO (PAYER)', startX, col1Y);
+  col1Y += 14;
+  doc.font('Helvetica-Bold').fontSize(9);
+  doc.text(data.payer.company || '', startX, col1Y, { width: col1Width });
+  col1Y = doc.y + 2;
+  doc.font('Helvetica').fontSize(9);
+  if (data.payer.tradeName) {
+    doc.text(data.payer.tradeName, startX, col1Y, { width: col1Width });
+    col1Y = doc.y + 2;
+  }
+  if (data.payer.address) {
+    doc.text(data.payer.address, startX, col1Y, { width: col1Width });
+    col1Y = doc.y + 2;
+  }
+  if (data.payer.zipCode) {
+    doc.text(`ZIP CODE: ${data.payer.zipCode}`, startX, col1Y, { width: col1Width });
+    col1Y = doc.y + 2;
+  }
+  if (data.payer.taxId) {
+    doc.text(`CNPJ/Tax ID: ${data.payer.taxId}`, startX, col1Y, { width: col1Width });
+    col1Y = doc.y;
+  }
+
+  let col2Y = sectionStartY;
+  doc.font('Helvetica-Bold').fontSize(10);
+  doc.text('BANK INFORMATION', col2X, col2Y);
+  col2Y += 14;
+  doc.font('Helvetica').fontSize(9);
+  const bankFields = [
+    ['Beneficiary:', data.bank.beneficiary],
+    ['Account No.:', data.bank.accountNumber],
+    ['Beneficiary Bank:', data.bank.bankName],
+    ['Bank Address:', data.bank.bankAddress],
+    ['Beneficiary Bank SWIFT:', data.bank.swift]
+  ].filter(([, value]) => value);
+  bankFields.forEach(([label, value]) => {
+    doc.font('Helvetica-Bold').text(label, col2X, col2Y, {
+      width: col2Width,
+      continued: true
+    });
+    doc.font('Helvetica').text(` ${value}`, { width: col2Width });
+    col2Y = doc.y + 2;
+  });
+
+  currentY = Math.max(col1Y, col2Y) + 15;
+
+  // Section 3: Services
+  doc.font('Helvetica-Bold').fontSize(11);
+  doc.text('3. DESCRIPTION OF SERVICES', startX, currentY);
+  currentY = doc.y + 3;
+  drawLine(doc, startX, currentY, startX + pageWidth, currentY, 1);
+  currentY += 12;
+
+  const colWidths = {
+    description: pageWidth * 0.50,
+    serviceDate: pageWidth * 0.18,
+    reference: pageWidth * 0.17,
+    amount: pageWidth * 0.15
+  };
+  const colX = {
+    description: startX,
+    serviceDate: startX + colWidths.description,
+    reference: startX + colWidths.description + colWidths.serviceDate,
+    amount: startX + colWidths.description + colWidths.serviceDate + colWidths.reference
+  };
+
+  doc.font('Helvetica-Bold').fontSize(9);
+  doc.text('DESCRIPTION', colX.description, currentY, { width: colWidths.description });
+  doc.text('SERVICE DATE', colX.serviceDate, currentY, { width: colWidths.serviceDate, align: 'center' });
+  doc.text('REFERENCE', colX.reference, currentY, { width: colWidths.reference, align: 'center' });
+  doc.text('AMOUNT (USD)', colX.amount, currentY, { width: colWidths.amount, align: 'right' });
+
+  currentY = doc.y + 3;
+  drawLine(doc, startX, currentY, startX + pageWidth, currentY, 1.5);
+  currentY += 8;
+
+  doc.font('Helvetica').fontSize(9);
+  (data.services || []).forEach((service) => {
+    const descStartY = currentY;
+    doc.text(service.description || '', colX.description, currentY, {
+      width: colWidths.description - 10,
+      align: 'left'
+    });
+    doc.text(service.serviceDate || '', colX.serviceDate, descStartY, {
+      width: colWidths.serviceDate,
+      align: 'center'
+    });
+    doc.text(service.reference || '', colX.reference, descStartY, {
+      width: colWidths.reference,
+      align: 'center'
+    });
+    doc.text(formatUSD(service.amount), colX.amount, descStartY, {
+      width: colWidths.amount - 5,
+      align: 'right'
+    });
+    currentY = doc.y + 8;
+  });
+
+  currentY += 10;
+
+  // Section 4: Totals
+  doc.font('Helvetica-Bold').fontSize(11);
+  doc.text('4. TOTALS', startX, currentY);
+  currentY = doc.y + 3;
+  drawLine(doc, startX, currentY, startX + pageWidth, currentY, 1);
+  currentY += 12;
+
+  const subtotal = (data.services || []).reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+  const discount = Number(data.discount) || 0;
+  const total = subtotal - discount;
+
+  const labelWidth = 180;
+  const valueWidth = 120;
+  const totalsStartX = startX + pageWidth - labelWidth - valueWidth;
+
+  doc.font('Helvetica').fontSize(10);
+  doc.text('SUBTOTAL', totalsStartX, currentY, { width: labelWidth, align: 'right' });
+  doc.font('Helvetica-Bold');
+  doc.text(`USD ${formatUSD(subtotal).replace('$ ', '')}`, totalsStartX + labelWidth, currentY, {
+    width: valueWidth,
+    align: 'right'
+  });
+  currentY += 11;
+
+  doc.font('Helvetica');
+  doc.text('DISCOUNT', totalsStartX, currentY, { width: labelWidth, align: 'right' });
+  doc.font('Helvetica-Bold');
+  doc.text(`USD ${formatUSD(discount).replace('$ ', '')}`, totalsStartX + labelWidth, currentY, {
+    width: valueWidth,
+    align: 'right'
+  });
+  currentY += 11;
+
+  doc.font('Helvetica-Bold').fontSize(11);
+  doc.text('TOTAL AMOUNT DUE', totalsStartX, currentY, { width: labelWidth, align: 'right' });
+  doc.text(`USD ${formatUSD(total).replace('$ ', '')}`, totalsStartX + labelWidth, currentY, {
+    width: valueWidth,
+    align: 'right'
+  });
+
+  currentY += 30;
+
+  doc.font('Helvetica').fontSize(9);
+  doc.text('(TOTAL DUE)', startX, currentY, {
+    width: pageWidth,
+    align: 'center'
+  });
+
+  currentY += 60;
+  doc.font('Helvetica-Bold').fontSize(10);
+  doc.text(data.signatoryCompany || data.exporter.company || '', startX, currentY, {
+    width: pageWidth,
+    align: 'center'
+  });
+  currentY = doc.y + 5;
+  doc.font('Helvetica-Oblique').fontSize(9);
+  doc.text('(Authorized Signature)', startX, currentY, {
+    width: pageWidth,
+    align: 'center'
+  });
+
+  doc.end();
+};
+
+const buildCommercialInvoiceData = (payload) => {
+  return {
+    logoPath: payload.logoPath || null,
+    logoBase64: payload.logoBase64 || null,
+    invoiceNumber: payload.invoiceNumber || 'INV-' + Date.now(),
+    issueDate: payload.issueDate || new Date().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }),
+    exporter: {
+      company: payload.exporterCompany || INVOICE_DEFAULTS.companyName,
+      address: payload.exporterAddress || `${INVOICE_DEFAULTS.addressLine1} ${INVOICE_DEFAULTS.addressLine2}`,
+      phone: payload.exporterPhone || INVOICE_DEFAULTS.phone
+    },
+    payer: {
+      company: payload.payerCompany || payload.customerName || '',
+      tradeName: payload.payerTradeName || '',
+      address: payload.payerAddress || payload.customerAddressLine1 || '',
+      zipCode: payload.payerZipCode || '',
+      taxId: payload.payerTaxId || payload.customerTaxId || ''
+    },
+    bank: {
+      beneficiary: payload.bankBeneficiary || payload.exporterCompany || INVOICE_DEFAULTS.companyName,
+      accountNumber: payload.bankAccountNumber || '',
+      bankName: payload.bankName || '',
+      bankAddress: payload.bankAddress || '',
+      swift: payload.bankSwift || ''
+    },
+    services: (payload.services || payload.items || []).map(service => ({
+      description: service.description || '',
+      serviceDate: service.serviceDate || service.date || '',
+      reference: service.reference || service.partNumber || '',
+      amount: Number(service.amount) || Number(service.total) || 0
+    })),
+    discount: Number(payload.discount) || 0,
+    signatoryCompany: payload.signatoryCompany || payload.exporterCompany || INVOICE_DEFAULTS.companyName
+  };
+};
 const buildInvoicePayload = payload => {
   const invoiceDate = sanitizeText(payload.invoiceDate, new Date().toISOString().slice(0, 10));
   const invoiceNumber = sanitizeText(payload.invoiceNumber, `INV-${invoiceDate.replace(/-/g, '')}`);
@@ -973,9 +1294,13 @@ app.get('/invoices', authenticate, adminOnly, asyncHandler(async (req, res) => {
 
   const data = records.map(rec => {
     const payload = rec.payload && rec.payload !== Prisma.JsonNull ? rec.payload : {};
-    const customerName = payload?.customer?.name || payload?.customerName || '';
-    const invoiceDate = payload?.invoice?.date || rec.createdAt?.toISOString()?.slice(0, 10) || null;
-    const total = payload?.totals?.total || 0;
+    const customerName = payload?.customer?.name || payload?.customerName || payload?.payer?.company || '';
+    const invoiceDate = payload?.invoice?.date || payload?.issueDate || rec.createdAt?.toISOString()?.slice(0, 10) || null;
+    const servicesTotal = Array.isArray(payload.services)
+      ? payload.services.reduce((sum, s) => sum + (Number(s.amount) || 0), 0)
+      : 0;
+    const discount = Number(payload.discount) || 0;
+    const total = payload?.totals?.total ?? (servicesTotal - discount) ?? 0;
     const currency = payload?.moeda || 'USD';
     return {
       number: rec.number,
@@ -1004,11 +1329,18 @@ app.get('/invoices/:number/pdf', authenticate, adminOnly, asyncHandler(async (re
   }
 
   const payload = record.payload && record.payload !== Prisma.JsonNull ? record.payload : null;
-  if (!payload || !payload.invoice || !payload.items) {
+  if (!payload) {
     return res.status(400).json({ message: 'Invoice registrada sem payload para gerar PDF.' });
   }
 
-  return renderInvoicePdf(res, payload);
+  if (payload.services) {
+    return renderCommercialInvoicePdf(res, payload);
+  }
+  if (payload.invoice && payload.items) {
+    return renderInvoicePdf(res, payload);
+  }
+
+  return res.status(400).json({ message: 'Payload da invoice não é reconhecido.' });
 }));
 
 app.delete('/invoices/:number', authenticate, adminOnly, asyncHandler(async (req, res) => {
@@ -1022,6 +1354,41 @@ app.delete('/invoices/:number', authenticate, adminOnly, asyncHandler(async (req
     return res.status(404).json({ message: 'Invoice não encontrada.' });
   }
   res.status(204).end();
+}));
+
+// Commercial invoice endpoint
+app.post('/invoices/commercial', authenticate, adminOnly, asyncHandler(async (req, res) => {
+  const body = req.body || {};
+  const services = Array.isArray(body.services) ? body.services : Array.isArray(body.items) ? body.items : [];
+  if (services.length === 0) {
+    return res.status(400).json({ message: 'Inclua ao menos um serviço na invoice.' });
+  }
+
+  let numeroReservado;
+  try {
+    const dataInvoice = body.invoiceDate || new Date().toISOString().slice(0, 10);
+    numeroReservado = await reserveInvoiceNumber(dataInvoice);
+  } catch (error) {
+    console.error('Erro ao reservar número da invoice', error);
+    return res.status(500).json({ message: 'Não foi possível reservar número para a invoice.' });
+  }
+
+  const invoiceData = buildCommercialInvoiceData({
+    ...body,
+    invoiceNumber: numeroReservado.number,
+    issueDate: body.invoiceDate || numeroReservado.invoiceDate
+  });
+
+  try {
+    await prisma.invoiceRecord.update({
+      where: { number: numeroReservado.number },
+      data: { payload: invoiceData }
+    });
+  } catch (error) {
+    console.error('Erro ao armazenar invoice comercial gerada', error);
+  }
+
+  return renderCommercialInvoicePdf(res, invoiceData);
 }));
 
 app.post('/auth/login', asyncHandler(async (req, res) => {

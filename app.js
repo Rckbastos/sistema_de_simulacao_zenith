@@ -211,11 +211,11 @@
   const gerarInvoiceItemId = () => `inv-item-${Date.now()}-${invoiceItemSeq++}`;
   const novoInvoiceItem = (overrides = {}) => ({
     uid: gerarInvoiceItemId(),
-    tipo: 'product',
+    tipo: 'service',
     partNumber: '',
     description: '',
     quantity: '',
-    unit: 'PCS',
+    unit: '',
     unitPrice: '',
     serviceDate: '',
     reference: '',
@@ -1007,7 +1007,7 @@
     const container = el('invoiceItensContainer');
     if (!container) return;
     if (!state.invoiceItens.length) {
-      container.innerHTML = '<div class="resumo-item resumo-item-empty" data-empty-invoice>Utilize o botão abaixo para adicionar até 3 itens/serviços.</div>';
+      container.innerHTML = '<div class="resumo-item resumo-item-empty" data-empty-invoice>Utilize o botão abaixo para adicionar até 3 serviços.</div>';
       return;
     }
     const moeda = state.invoiceForm?.moeda || 'USD';
@@ -1021,21 +1021,10 @@
             <span>Item ${index + 1}</span>
             <button type="button" class="cotacao-item-remove" ${disabledRemove} onclick="removerInvoiceItem('${item.uid}')">🗑️</button>
           </div>
-          <div class="grid-2" style="margin-top: 5px;">
-            <div class="form-group" style="margin:0;">
-              <label class="form-label">Tipo</label>
-              <select class="form-select" onchange="atualizarInvoiceItemCampo('${item.uid}', 'tipo', this.value)">
-                <option value="product" ${item.tipo === 'product' ? 'selected' : ''}>Produto</option>
-                <option value="service" ${item.tipo === 'service' ? 'selected' : ''}>Serviço</option>
-              </select>
-            </div>
-            <div class="form-group" style="margin:0;">
-              <label class="form-label">Referência</label>
-              <input type="text" class="form-input" value="${escapeHtml(item.reference || '')}" oninput="atualizarInvoiceItemCampo('${item.uid}', 'reference', this.value)">
-            </div>
+          <div class="form-group" style="margin:0; margin-top: 5px;">
+            <label class="form-label">Referência</label>
+            <input type="text" class="form-input" value="${escapeHtml(item.reference || '')}" oninput="atualizarInvoiceItemCampo('${item.uid}', 'reference', this.value)">
           </div>
-          <label class="form-label">Part Number</label>
-          <input type="text" class="form-input" value="${escapeHtml(item.partNumber || '')}" oninput="atualizarInvoiceItemCampo('${item.uid}', 'partNumber', this.value)">
           <label class="form-label">Descrição</label>
           <textarea class="form-textarea" rows="2" oninput="atualizarInvoiceItemCampo('${item.uid}', 'description', this.value)">${escapeHtml(item.description || '')}</textarea>
           <div class="grid-2" style="margin-top: 10px;">
@@ -1044,17 +1033,7 @@
               <input type="date" class="form-input" value="${item.serviceDate || ''}" oninput="atualizarInvoiceItemCampo('${item.uid}', 'serviceDate', this.value)">
             </div>
             <div class="form-group" style="margin:0;">
-              <label class="form-label">Quantidade</label>
-              <input type="number" class="form-input" min="0" step="0.01" value="${qty}" oninput="atualizarInvoiceItemCampo('${item.uid}', 'quantity', this.value)">
-            </div>
-          </div>
-          <div class="grid-3" style="margin-top: 10px;">
-            <div class="form-group" style="margin:0;">
-              <label class="form-label">Unidade</label>
-              <input type="text" class="form-input" value="${escapeHtml(item.unit || '')}" oninput="atualizarInvoiceItemCampo('${item.uid}', 'unit', this.value)">
-            </div>
-            <div class="form-group" style="margin:0;">
-              <label class="form-label">Preço Unit. (${moeda})</label>
+              <label class="form-label">Valor (USD)</label>
               <input type="number" class="form-input" min="0" step="0.01" value="${unitPrice}" oninput="atualizarInvoiceItemCampo('${item.uid}', 'unitPrice', this.value)">
             </div>
           </div>
@@ -1118,29 +1097,28 @@
 
   const montarPayloadInvoice = () => {
     const form = coletarInvoiceFormDoDom();
-    const itensValidos = state.invoiceItens
-      .map(item => ({
-        tipo: item.tipo || 'product',
-        serviceDate: item.serviceDate,
-        reference: item.reference,
-        partNumber: (item.partNumber || '').trim(),
-        description: (item.description || '').trim(),
-        quantity: toNumber(item.quantity),
-        unit: (item.unit || 'PCS').trim() || 'PCS',
-        unitPrice: toNumber(item.unitPrice)
-      }))
-      .filter(item => item.description && item.unitPrice > 0)
+    const services = state.invoiceItens
+      .map(item => {
+        const qty = toNumber(item.quantity);
+        const effectiveQty = item.tipo === 'service' ? (qty > 0 ? qty : 1) : qty;
+        const unitPrice = toNumber(item.unitPrice);
+        const amount = effectiveQty * unitPrice;
+        return {
+          description: (item.description || '').trim(),
+          serviceDate: item.serviceDate || '',
+          reference: (item.reference || '').trim(),
+          amount
+        };
+      })
+      .filter(s => s.description && s.amount > 0)
       .slice(0, MAX_INVOICE_ITENS);
-    if (!itensValidos.length) {
-      throw new Error('Inclua ao menos um item com quantidade e preço.');
+    if (!services.length) {
+      throw new Error('Inclua ao menos um serviço com valor.');
     }
     if (!form.clienteNome) {
       throw new Error('Preencha os dados do cliente para a invoice.');
     }
-    const subtotal = itensValidos.reduce((sum, item) => {
-      const qty = item.tipo === 'service' ? (item.quantity > 0 ? item.quantity : 1) : item.quantity;
-      return sum + (qty * item.unitPrice);
-    }, 0);
+    const subtotal = services.reduce((sum, s) => sum + s.amount, 0);
     const desconto = Math.min(Math.max(0, toNumber(form.desconto)), subtotal);
     const frete = Math.max(0, toNumber(form.frete));
     const total = subtotal - desconto + frete;
@@ -1166,7 +1144,7 @@
       customerNumber: form.customerNumber || form.clienteId,
       paymentTerms: form.paymentTerms || 'Prepayment',
       deliveryTerms: form.deliveryTerms || 'FOB',
-      items: itensValidos,
+      services,
       discount: desconto,
       shipping: frete,
       countryOfOrigin: form.countryOfOrigin,
@@ -1214,7 +1192,7 @@
     }
     setInvoiceStatus('Gerando invoice em PDF...', '');
     try {
-      const blob = await apiRequest('/invoices/generate', {
+      const blob = await apiRequest('/invoices/commercial', {
         method: 'POST',
         body: JSON.stringify(payload),
         responseType: 'blob'
