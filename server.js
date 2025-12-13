@@ -444,19 +444,19 @@ const renderCommercialInvoicePdf = (res, data) => {
   doc.font('Helvetica-Bold').fontSize(20).fillColor('#000');
   doc.text('COMMERCIAL INVOICE', startX, headerY, {
     width: pageWidth,
-    align: 'right'
+    align: 'center'
   });
 
-  doc.moveDown(0.3);
-  doc.font('Helvetica').fontSize(10);
-  doc.text(`Invoice No.: ${data.invoiceNumber || '-'}`, startX, doc.y, {
-    width: pageWidth,
-    align: 'right'
-  });
-  doc.text(`Issue Date: ${data.issueDate || '-'}`, startX, doc.y, {
-    width: pageWidth,
-    align: 'right'
-  });
+  doc.moveDown(0.3);
+  doc.font('Helvetica').fontSize(10);
+  doc.text(`Invoice No.: ${data.invoiceNumber || '-'}`, startX, doc.y, {
+   width: pageWidth,
+   align: 'center'
+  });
+  doc.text(`Issue Date: ${data.issueDate || '-'}`, startX, doc.y, {
+   width: pageWidth,
+   align: 'center'
+  });
   doc.moveDown(1.5);
 
   // Section 1: Exporter
