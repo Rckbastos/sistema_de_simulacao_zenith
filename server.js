@@ -514,21 +514,21 @@ const renderCommercialInvoicePdf = (res, data) => {
     col1Y = doc.y + 2;
   }
   if (data.payer.taxId) {
-    doc.text(`CNPJ/Tax ID: ${data.payer.taxId}`, startX, col1Y, { width: col1Width });
+    doc.text(`CNPJ (TAX ID): ${data.payer.taxId}`, startX, col1Y, { width: col1Width });
     col1Y = doc.y;
   }
 
   let col2Y = sectionStartY;
   doc.font('Helvetica-Bold').fontSize(10);
-  doc.text('BANK INFORMATION', col2X, col2Y);
+  doc.text('BANK DETAILS', col2X, col2Y);
   col2Y += 14;
   doc.font('Helvetica').fontSize(9);
   const bankFields = [
     ['Beneficiary:', data.bank.beneficiary],
-    ['Account No.:', data.bank.accountNumber],
-    ['Beneficiary Bank:', data.bank.bankName],
-    ['Bank Address:', data.bank.bankAddress],
-    ['Beneficiary Bank SWIFT:', data.bank.swift],
+    ['Bank Name:', data.bank.bankName],
+    ['Address:', data.bank.bankAddress],
+    ['Account Number:', data.bank.accountNumber],
+    ['SWIFT BIC:', data.bank.swift],
     ['Intermediary Bank:', data.bank.intermediaryBank],
     ['Intermediary SWIFT:', data.bank.intermediarySwift]
   ].filter(([, value]) => value);
@@ -672,34 +672,34 @@ const buildCommercialInvoiceData = (payload) => {
       day: 'numeric'
     }),
     exporter: {
-      company: payload.exporterCompany || INVOICE_DEFAULTS.companyName,
-      address: payload.exporterAddress || `${INVOICE_DEFAULTS.addressLine1} ${INVOICE_DEFAULTS.addressLine2}`,
-      phone: payload.exporterPhone || INVOICE_DEFAULTS.phone
+      company: payload.exporterCompany || '',
+      address: payload.exporterAddress || '',
+      phone: payload.exporterPhone || ''
     },
     payer: {
-      company: payload.payerCompany || payload.customerName || '',
-      tradeName: payload.payerTradeName || '',
-      address: payload.payerAddress || payload.customerAddressLine1 || '',
+      company: payload.payerCompany || 'C. N PAGAMENTOS ONLINE LTDA',
+      tradeName: payload.payerTradeName || 'ZENITH PAY',
+      address: payload.payerAddress || '',
       zipCode: payload.payerZipCode || '',
-      taxId: payload.payerTaxId || payload.customerTaxId || ''
+      taxId: payload.payerTaxId || ''
     },
     bank: {
-      beneficiary: payload.bankBeneficiary || payload.exporterCompany || INVOICE_DEFAULTS.companyName,
-      accountNumber: payload.bankAccountNumber || payload.beneficiaryAccount || payload.bankAccount || '',
+      beneficiary: payload.bankBeneficiary || payload.exporterCompany || '',
+      accountNumber: payload.bankAccountNumber || '',
       bankName: payload.bankName || '',
-      bankAddress: payload.bankAddress || payload.bankBeneficiaryAddress || '',
-      swift: payload.bankSwift || payload.swiftCode || '',
+      bankAddress: payload.bankAddress || '',
+      swift: payload.bankSwift || '',
       intermediaryBank: payload.intermediaryBank || '',
       intermediarySwift: payload.intermediarySwift || ''
     },
-    services: (payload.services || payload.items || []).map(service => ({
+    services: (payload.services || []).map(service => ({
       description: service.description || '',
-      serviceDate: service.serviceDate || service.date || '',
-      reference: service.reference || service.partNumber || '',
-      amount: Number(service.amount) || Number(service.total) || 0
+      serviceDate: service.serviceDate || '',
+      reference: service.reference || '',
+      amount: Number(service.amount) || 0
     })),
     discount: Number(payload.discount) || 0,
-    signatoryCompany: payload.signatoryCompany || payload.exporterCompany || INVOICE_DEFAULTS.companyName
+    signatoryCompany: payload.signatoryCompany || payload.exporterCompany || ''
   };
 };
 const buildInvoicePayload = payload => {

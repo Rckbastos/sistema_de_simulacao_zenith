@@ -180,6 +180,14 @@
     '"': '&quot;',
     "'": '&#39;'
   })[match]);
+  const formatInvoiceIssueDate = value => {
+    const date = value ? new Date(value) : new Date();
+    if (Number.isNaN(date.getTime())) {
+      const now = new Date();
+      return now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
 
   const jsStringLiteral = value => `'${String(value ?? '')
     .replace(/\\/g, '\\\\')
@@ -1090,15 +1098,12 @@
     const form = coletarInvoiceFormDoDom();
     const services = state.invoiceItens
       .map(item => {
-        const qty = toNumber(item.quantity);
-        const effectiveQty = item.tipo === 'service' ? (qty > 0 ? qty : 1) : qty;
         const unitPrice = toNumber(item.unitPrice);
-        const amount = effectiveQty * unitPrice;
         return {
           description: (item.description || '').trim(),
           serviceDate: item.serviceDate || '',
           reference: (item.reference || '').trim(),
-          amount
+          amount: unitPrice
         };
       })
       .filter(s => s.description && s.amount > 0)
@@ -1126,9 +1131,13 @@
     form.desconto = desconto;
     form.amountInWords = amountInWords;
 
-    const exporterCompany = 'ZENITH PAY';
-    const exporterAddress = 'C. N PAGAMENTOS ONLINE LTDA, R. WASHINGTON LUIS, 59, LOTE 10B, QUADRA 43, CXPST 20 - CENTRO, NOSSA SENHORA DAS GRAÇAS – PR – CEP: 86.680-000 – BRASIL';
-    const exporterPhone = '+55 (44) 3025-9090';
+    const clienteNome = form.clienteNome || 'CLIENTE';
+    const clienteEndereco = form.clienteEndereco || '';
+    const clienteTelefone = form.clienteTelefone || '';
+    const bankBeneficiary = form.bankBeneficiary || clienteNome;
+    const invoiceNumber = (form.invoiceNumber && form.invoiceNumber.trim())
+      || `INV-${(form.invoiceDate || getDefaultInvoiceForm().invoiceDate).replace(/-/g, '')}`;
+    const issueDate = formatInvoiceIssueDate(form.invoiceDate);
 
     return {
       clienteId: form.clienteId || undefined,
@@ -1141,7 +1150,7 @@
       customerEmail: form.clienteEmail,
       customerPhone: form.clienteTelefone || form.clienteContato,
       customerContact: form.clienteContato,
-      invoiceNumber: form.invoiceNumber,
+      invoiceNumber,
       invoiceDate: form.invoiceDate || getDefaultInvoiceForm().invoiceDate,
       customerNumber: form.customerNumber || form.clienteId,
       paymentTerms: form.paymentTerms || 'Prepayment',
@@ -1158,7 +1167,7 @@
       bankBranch: form.bankBranch,
       beneficiaryAccount: form.bankAccount,
       iban: form.bankAccount,
-      beneficiaryName: form.bankBeneficiary,
+      beneficiaryName: bankBeneficiary,
       beneficiaryAddress: form.bankBeneficiaryAddress,
       intermediaryBank: form.intermediaryBank,
       intermediarySwift: form.intermediarySwift,
@@ -1168,17 +1177,23 @@
       amountInWords,
       moeda: form.moeda,
       language: form.language || 'pt',
-      exporterCompany,
-      exporterAddress,
-      exporterPhone,
-      payerCompany: form.clienteNome,
-      payerAddress: form.clienteEndereco,
-      payerTaxId: form.clienteTaxId,
-      payerTradeName: form.clienteContato,
+      exporterCompany: clienteNome,
+      exporterAddress: clienteEndereco,
+      exporterPhone: clienteTelefone ? `Tel: ${clienteTelefone}` : '',
+      payerCompany: 'C. N PAGAMENTOS ONLINE LTDA',
+      payerTradeName: 'ZENITH PAY',
+      payerAddress: 'R. WASHINGTON LUIS, 59, LOTE 10B, QUADRA 43, CXPST 20, CENTRO, NOSSA SENHORA DAS GRACAS, PR',
+      payerZipCode: '86.680-000',
+      payerTaxId: '53.213.723/0001-35',
       bankAccountNumber: form.bankAccount,
       bankAddress: form.bankBeneficiaryAddress,
-      bankBeneficiary: form.bankBeneficiary || exporterCompany,
-      signatoryCompany: exporterCompany
+      bankBeneficiary,
+      bankName: form.bankName,
+      bankSwift: form.bankSwift,
+      intermediaryBank: form.intermediaryBank,
+      intermediarySwift: form.intermediarySwift,
+      issueDate,
+      signatoryCompany: clienteNome
     };
   };
 
