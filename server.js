@@ -699,7 +699,9 @@ const buildCommercialInvoiceData = (payload) => {
       amount: Number(service.amount) || 0
     })),
     discount: Number(payload.discount) || 0,
-    signatoryCompany: payload.signatoryCompany || payload.exporterCompany || ''
+    signatoryCompany: payload.signatoryCompany || payload.exporterCompany || '',
+    clienteId: payload.clienteId || null,
+    customerName: payload.customerName || payload.exporterCompany || ''
   };
 };
 const buildInvoicePayload = payload => {
@@ -1286,7 +1288,11 @@ app.get('/invoices', authenticate, adminOnly, asyncHandler(async (req, res) => {
 
   const data = records.map(rec => {
     const payload = rec.payload && rec.payload !== Prisma.JsonNull ? rec.payload : {};
-    const customerName = payload?.customer?.name || payload?.customerName || payload?.payer?.company || '';
+    const customerName = payload?.exporter?.company
+      || payload?.customer?.name
+      || payload?.customerName
+      || payload?.payer?.company
+      || '';
     const invoiceDate = payload?.invoice?.date || payload?.issueDate || rec.createdAt?.toISOString()?.slice(0, 10) || null;
     const servicesTotal = Array.isArray(payload.services)
       ? payload.services.reduce((sum, s) => sum + (Number(s.amount) || 0), 0)
