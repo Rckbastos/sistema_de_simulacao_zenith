@@ -244,6 +244,7 @@
       deliveryInfo: '',
       shippingMethod: 'Standard',
       desconto: 0,
+      frete: 0,
       observacoes: '',
       bankName: '',
       bankSwift: '',
@@ -1110,11 +1111,21 @@
     if (!form.clienteNome) {
       throw new Error('Preencha os dados do cliente para a invoice.');
     }
+    if (!form.bankName?.trim()) {
+      throw new Error('Informe o banco do cliente.');
+    }
+    if (!form.bankBeneficiaryAddress?.trim()) {
+      throw new Error('Informe o endereço do banco do cliente.');
+    }
+    if (!form.bankSwift?.trim()) {
+      throw new Error('Informe o código SWIFT do beneficiário.');
+    }
     const subtotal = services.reduce((sum, s) => sum + s.amount, 0);
     const desconto = Math.min(Math.max(0, toNumber(form.desconto)), subtotal);
     const total = subtotal - desconto;
     const amountInWords = gerarValorPorExtenso(total, form.moeda);
 
+    const frete = 0;
     form.desconto = desconto;
     form.frete = frete;
     form.amountInWords = amountInWords;
@@ -1137,7 +1148,7 @@
       deliveryTerms: form.deliveryTerms || 'FOB',
       services,
       discount: desconto,
-      shipping: 0,
+      shipping: frete,
       countryOfOrigin: undefined,
       hsCode: undefined,
       deliveryInfo: undefined,
