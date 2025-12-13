@@ -528,7 +528,9 @@ const renderCommercialInvoicePdf = (res, data) => {
     ['Account No.:', data.bank.accountNumber],
     ['Beneficiary Bank:', data.bank.bankName],
     ['Bank Address:', data.bank.bankAddress],
-    ['Beneficiary Bank SWIFT:', data.bank.swift]
+    ['Beneficiary Bank SWIFT:', data.bank.swift],
+    ['Intermediary Bank:', data.bank.intermediaryBank],
+    ['Intermediary SWIFT:', data.bank.intermediarySwift]
   ].filter(([, value]) => value);
   bankFields.forEach(([label, value]) => {
     doc.font('Helvetica-Bold').text(label, col2X, col2Y, {
@@ -683,10 +685,12 @@ const buildCommercialInvoiceData = (payload) => {
     },
     bank: {
       beneficiary: payload.bankBeneficiary || payload.exporterCompany || INVOICE_DEFAULTS.companyName,
-      accountNumber: payload.bankAccountNumber || '',
+      accountNumber: payload.bankAccountNumber || payload.beneficiaryAccount || payload.bankAccount || '',
       bankName: payload.bankName || '',
-      bankAddress: payload.bankAddress || '',
-      swift: payload.bankSwift || ''
+      bankAddress: payload.bankAddress || payload.bankBeneficiaryAddress || '',
+      swift: payload.bankSwift || payload.swiftCode || '',
+      intermediaryBank: payload.intermediaryBank || '',
+      intermediarySwift: payload.intermediarySwift || ''
     },
     services: (payload.services || payload.items || []).map(service => ({
       description: service.description || '',

@@ -244,7 +244,6 @@
       deliveryInfo: '',
       shippingMethod: 'Standard',
       desconto: 0,
-      frete: 0,
       observacoes: '',
       bankName: '',
       bankSwift: '',
@@ -833,7 +832,6 @@
     setValue('invoiceIntermediaryBank', form.intermediaryBank || '');
     setValue('invoiceIntermediarySwift', form.intermediarySwift || '');
     setValue('invoiceDesconto', form.desconto || '');
-    setValue('invoiceFrete', form.frete || '');
     setValue('invoicePaisOrigem', form.countryOfOrigin || '');
     setValue('invoiceHsCode', form.hsCode || '');
     setValue('invoiceDeliveryInfo', form.deliveryInfo || '');
@@ -923,12 +921,12 @@
     if (campo === 'moeda') {
       form.moeda = normalizarMoedaLocal(valor);
       renderInvoiceItens();
-    } else if (campo === 'desconto' || campo === 'frete') {
+    } else if (campo === 'desconto') {
       form[campo] = Math.max(0, toNumber(valor));
     } else {
       form[campo] = valor;
     }
-    if (['moeda', 'desconto', 'frete'].includes(campo)) {
+    if (['moeda', 'desconto'].includes(campo)) {
       calcularInvoiceResumo();
     }
     if (['invoicePaymentTerms', 'invoiceDeliveryTerms', 'countryOfOrigin', 'hsCode', 'deliveryInfo', 'shippingMethod', 'bankName', 'bankSwift', 'bankBranch', 'bankAccount', 'bankBeneficiary', 'bankBeneficiaryAddress', 'intermediaryBank', 'intermediarySwift'].includes(campo)) {
@@ -1125,10 +1123,12 @@
     const total = subtotal - desconto;
     const amountInWords = gerarValorPorExtenso(total, form.moeda);
 
-    const frete = 0;
     form.desconto = desconto;
-    form.frete = frete;
     form.amountInWords = amountInWords;
+
+    const exporterCompany = 'ZENITH PAY';
+    const exporterAddress = 'C. N PAGAMENTOS ONLINE LTDA, R. WASHINGTON LUIS, 59, LOTE 10B, QUADRA 43, CXPST 20 - CENTRO, NOSSA SENHORA DAS GRAÇAS – PR – CEP: 86.680-000 – BRASIL';
+    const exporterPhone = '+55 (44) 3025-9090';
 
     return {
       clienteId: form.clienteId || undefined,
@@ -1148,7 +1148,7 @@
       deliveryTerms: form.deliveryTerms || 'FOB',
       services,
       discount: desconto,
-      shipping: frete,
+      shipping: 0,
       countryOfOrigin: undefined,
       hsCode: undefined,
       deliveryInfo: undefined,
@@ -1167,7 +1167,18 @@
       extraNotes: form.observacoes ? [form.observacoes] : [],
       amountInWords,
       moeda: form.moeda,
-      language: form.language || 'pt'
+      language: form.language || 'pt',
+      exporterCompany,
+      exporterAddress,
+      exporterPhone,
+      payerCompany: form.clienteNome,
+      payerAddress: form.clienteEndereco,
+      payerTaxId: form.clienteTaxId,
+      payerTradeName: form.clienteContato,
+      bankAccountNumber: form.bankAccount,
+      bankAddress: form.bankBeneficiaryAddress,
+      bankBeneficiary: form.bankBeneficiary || exporterCompany,
+      signatoryCompany: exporterCompany
     };
   };
 
