@@ -2311,7 +2311,10 @@
     removerInvoiceItem,
     atualizarInvoiceItemCampo,
     limparInvoiceForm,
-    gerarInvoice
+    gerarInvoice,
+    fetchInvoiceHistorico,
+    baixarInvoicePdf,
+    deletarInvoice
   };
 
   Object.assign(window, exported);

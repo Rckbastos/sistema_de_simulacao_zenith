@@ -356,7 +356,7 @@ const numberToWordsUSD = (value) => {
 };
 
 // Helpers for commercial invoice
-const drawLine = (doc, x1, y1, x2, y2, width = 1) => {
+const drawPdfLine = (doc, x1, y1, x2, y2, width = 1) => {
   doc.save();
   doc.lineWidth(width).moveTo(x1, y1).lineTo(x2, y2).stroke();
   doc.restore();
@@ -464,7 +464,7 @@ const renderCommercialInvoicePdf = (res, data) => {
   doc.font('Helvetica-Bold').fontSize(11);
   doc.text('1. EXPORTER', startX, currentY);
   currentY = doc.y + 3;
-  drawLine(doc, startX, currentY, startX + pageWidth, currentY, 1);
+  drawPdfLine(doc, startX, currentY, startX + pageWidth, currentY, 1);
   currentY += 10;
 
   doc.font('Helvetica-Bold').fontSize(9);
@@ -485,7 +485,7 @@ const renderCommercialInvoicePdf = (res, data) => {
   doc.font('Helvetica-Bold').fontSize(11);
   doc.text('2. PAYER AND BANK DETAILS', startX, currentY);
   currentY = doc.y + 3;
-  drawLine(doc, startX, currentY, startX + pageWidth, currentY, 1);
+  drawPdfLine(doc, startX, currentY, startX + pageWidth, currentY, 1);
   currentY += 10;
 
   const col1Width = (pageWidth / 2) - 15;
@@ -545,7 +545,7 @@ const renderCommercialInvoicePdf = (res, data) => {
   doc.font('Helvetica-Bold').fontSize(11);
   doc.text('3. DESCRIPTION OF SERVICES', startX, currentY);
   currentY = doc.y + 3;
-  drawLine(doc, startX, currentY, startX + pageWidth, currentY, 1);
+  drawPdfLine(doc, startX, currentY, startX + pageWidth, currentY, 1);
   currentY += 12;
 
   const colWidths = {
@@ -568,7 +568,7 @@ const renderCommercialInvoicePdf = (res, data) => {
   doc.text('AMOUNT (USD)', colX.amount, currentY, { width: colWidths.amount, align: 'right' });
 
   currentY = doc.y + 3;
-  drawLine(doc, startX, currentY, startX + pageWidth, currentY, 1.5);
+  drawPdfLine(doc, startX, currentY, startX + pageWidth, currentY, 1.5);
   currentY += 8;
 
   doc.font('Helvetica').fontSize(9);
@@ -599,7 +599,7 @@ const renderCommercialInvoicePdf = (res, data) => {
   doc.font('Helvetica-Bold').fontSize(11);
   doc.text('4. TOTALS', startX, currentY);
   currentY = doc.y + 3;
-  drawLine(doc, startX, currentY, startX + pageWidth, currentY, 1);
+  drawPdfLine(doc, startX, currentY, startX + pageWidth, currentY, 1);
   currentY += 12;
 
   const subtotal = (data.services || []).reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
