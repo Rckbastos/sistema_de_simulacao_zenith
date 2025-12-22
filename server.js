@@ -46,6 +46,9 @@ const USDT_TICKER_URL = process.env.USDT_TICKER_URL?.trim()
   || 'https://api.binance.com/api/v3/ticker/price?symbol=USDTBRL';
 const USDT_TICKER_CACHE_MS = Math.max(2000, Number(process.env.USDT_TICKER_CACHE_MS || 3000) || 3000);
 const USDT_BRL_SPREAD_PCT = Math.max(0, Number(process.env.USDT_BRL_SPREAD_PCT ?? 0.003) || 0.003);
+const USDT_BRL_FALLBACK = Number.isFinite(Number(process.env.USDT_BRL_FALLBACK))
+  ? Number(process.env.USDT_BRL_FALLBACK)
+  : null;
 const USD_USDT_FALLBACK = Number(process.env.USD_USDT_FALLBACK || 1);
 let tickerCache = { expires: 0, data: null };
 let usdtTickerCache = { expires: 0, value: null };
@@ -1184,12 +1187,9 @@ const fetchExchangeTicker = async () => {
 
     if (!usdUsdt && Number.isFinite(USD_USDT_FALLBACK)) usdUsdt = USD_USDT_FALLBACK;
 
-    if (!Number.isFinite(usdtBrl)) {
-      usdtBrl = Number.isFinite(previous?.usdtBrl) ? previous.usdtBrl : null;
-    }
-    if (!Number.isFinite(usdtBrl)) {
-      throw new Error('USDT/BRL indisponível na Binance');
-    }
+    if (!Number.isFinite(usdtBrl)) usdtBrl = Number.isFinite(previous?.usdtBrl) ? previous.usdtBrl : null;
+    if (!Number.isFinite(usdtBrl) && Number.isFinite(USDT_BRL_FALLBACK)) usdtBrl = USDT_BRL_FALLBACK;
+    if (!Number.isFinite(usdtBrl)) throw new Error('USDT/BRL indisponível na Binance');
 
     const brlUsd = invert(usdBrl);
     const brlUsdt = invert(usdtBrl);
@@ -1215,7 +1215,18 @@ const fetchExchangeTicker = async () => {
       console.warn('Retornando cotação anterior por falha na atualização.');
       return previous;
     }
-    throw error;
+    // Como último recurso, retorna fallback básico para não derrubar o front
+    return {
+      usdBrl: null,
+      usdtBrl: Number.isFinite(USDT_BRL_FALLBACK) ? USDT_BRL_FALLBACK : null,
+      brlUsd: invert(null),
+      usdUsdt: Number.isFinite(USD_USDT_FALLBACK) ? USD_USDT_FALLBACK : null,
+      brlUsdt: null,
+      btcBrl: null,
+      ethBrl: null,
+      provider: 'fallback',
+      updatedAt: new Date().toISOString()
+    };
   }
 };
 
