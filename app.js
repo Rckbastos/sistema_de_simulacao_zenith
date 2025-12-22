@@ -2087,7 +2087,7 @@
       ? Number(state.cotacaoUsdtBrl)
       : (Number.isFinite(baseRate) ? baseRate * (1 + USDT_SPREAD_PCT) : null);
     const textoBase = Number.isFinite(baseRate) ? `R$ ${formatFxRate(baseRate)}` : '--';
-    const textoSpread = Number.isFinite(spreadRate) ? `R$ ${formatFxRate(spreadRate)} (c/ spread)` : '--';
+    const textoSpread = Number.isFinite(spreadRate) ? `R$ ${formatFxRate(spreadRate)}` : '--';
 
     targets.forEach(target => {
       if (!target.wrapper || !target.value) return;
@@ -2097,8 +2097,8 @@
         if (target.base) target.base.textContent = '--';
         return;
       }
-      if (target.base) target.base.textContent = `Cotação atual: ${textoBase}`;
-      target.value.textContent = `Valor c/ spread: ${textoSpread}`;
+      if (target.base) target.base.textContent = `Cotação atual (sem spread): ${textoBase}`;
+      target.value.textContent = `Cotação com spread: ${textoSpread}`;
       target.wrapper.style.display = 'flex';
     });
   };
