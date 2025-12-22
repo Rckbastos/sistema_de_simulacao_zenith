@@ -72,6 +72,12 @@
     cotacaoItens: [],
     cotacaoMoeda: 'BRL',
     cotacaoUsdtBrl: null,
+    conversor: {
+      moeda: 'USDT',
+      valor: '',
+      spread: 0.003,
+      ultimoResultado: null
+    },
     invoiceItens: [],
     invoiceForm: null
   };
@@ -198,7 +204,7 @@
     minimumFractionDigits: 4,
     maximumFractionDigits: 4
   });
-  const TICKER_REFRESH_MS = 5000;
+  const TICKER_REFRESH_MS = 3000;
   let tickerTimer = null;
   let cotacaoItemSeq = 0;
   const gerarItemId = () => `item-${Date.now()}-${cotacaoItemSeq++}`;
@@ -321,6 +327,7 @@
       } else {
         atualizarResumoCambio(false);
       }
+      atualizarConversorComTicker();
     } catch (error) {
       console.warn('Ticker indisponível', error);
     } finally {
@@ -2040,6 +2047,88 @@
     });
   };
 
+  const limparConversorResultado = (mensagem) => {
+    setText('conversorRate', '--');
+    setText('conversorTotal', '--');
+    setText('conversorStatus', mensagem || 'Selecione USDT e informe o valor.');
+  };
+
+  const atualizarConversorUI = () => {
+    const select = el('conversorMoeda');
+    const suffix = el('conversorSuffix');
+    if (select) {
+      select.value = state.conversor.moeda || '';
+    }
+    if (suffix) {
+      suffix.textContent = state.conversor.moeda === 'USDT' ? 'USDT' : '---';
+    }
+  };
+
+  let conversorTimer = null;
+  const executarConversorUsdt = async () => {
+    const select = el('conversorMoeda');
+    if (select && select.value !== 'USDT') {
+      limparConversorResultado('Selecione USDT → BRL para converter.');
+      return;
+    }
+    const valor = toNumber(el('conversorValor')?.value);
+    state.conversor.valor = el('conversorValor')?.value || '';
+    if (!valor) {
+      limparConversorResultado('Informe um valor em USDT.');
+      return;
+    }
+    setText('conversorStatus', 'Calculando...');
+    setText('conversorTotal', '--');
+    try {
+      const data = await apiRequest(`/cambio/converter?amount=${encodeURIComponent(valor)}`);
+      state.conversor.spread = Number(data?.spreadPct ?? state.conversor.spread) || state.conversor.spread;
+      state.conversor.ultimoResultado = data;
+      const taxa = Number(data?.rateWithSpread);
+      setText('conversorRate', Number.isFinite(taxa)
+        ? `${formatCurrency(taxa)} (c/ spread ${Number(data.spreadPercent || (data.spreadPct * 100)).toFixed(2)}%)`
+        : '--');
+      setText('conversorTotal', formatCurrency(data?.totalBrl));
+      setText('conversorStatus', `Base ${formatCurrency(data?.baseRate)} | Atualizado ${new Date(data?.updatedAt || Date.now()).toLocaleTimeString()}`);
+    } catch (error) {
+      limparConversorResultado(error.message || 'Falha ao converter.');
+    }
+  };
+
+  const atualizarConversorComTicker = () => {
+    const select = el('conversorMoeda');
+    if (select && select.value !== 'USDT') return;
+    const valor = toNumber(el('conversorValor')?.value);
+    if (!valor || !Number.isFinite(Number(state.ticker?.usdtBrl))) return;
+    const spread = Number(state.conversor.spread) || 0.003;
+    const taxa = Number(state.ticker.usdtBrl) * (1 + spread);
+    setText('conversorRate', `${formatCurrency(taxa)} (c/ spread ${(spread * 100).toFixed(2)}%)`);
+    setText('conversorTotal', formatCurrency(valor * taxa));
+    setText('conversorStatus', `Base ${formatCurrency(state.ticker.usdtBrl)} | Atualizado ${new Date(state.ticker.updatedAt || Date.now()).toLocaleTimeString()}`);
+  };
+
+  const onConversorMoedaChange = () => {
+    const select = el('conversorMoeda');
+    state.conversor.moeda = select ? select.value : '';
+    atualizarConversorUI();
+    if (state.conversor.moeda === 'USDT') {
+      if (conversorTimer) window.clearTimeout(conversorTimer);
+      conversorTimer = window.setTimeout(executarConversorUsdt, 200);
+    } else {
+      limparConversorResultado();
+    }
+  };
+
+  const onConversorValorChange = () => {
+    if (state.conversor.moeda !== 'USDT') {
+      limparConversorResultado('Selecione USDT → BRL para converter.');
+      return;
+    }
+    if (conversorTimer) {
+      window.clearTimeout(conversorTimer);
+    }
+    conversorTimer = window.setTimeout(executarConversorUsdt, 300);
+  };
+
   const calcularCotacao = () => {
     if (temCotacaoMultiUI()) {
       calcularCotacaoMulti();
@@ -2332,6 +2421,8 @@
     removerItemCotacao,
     atualizarItemCotacaoCampo,
     calcularCotacao,
+    onConversorMoedaChange,
+    onConversorValorChange,
     salvarCotacao,
     limparFormCotacao,
     mudarStatusCotacao,
@@ -2368,5 +2459,7 @@
   calcularInvoiceResumo();
   setInvoiceStatus('');
   restaurarSessao();
+  atualizarConversorUI();
+  limparConversorResultado();
   iniciarAtualizacaoTicker();
 })();

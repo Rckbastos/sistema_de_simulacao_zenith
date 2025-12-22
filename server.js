@@ -49,8 +49,14 @@ const FX_HEADERS = {
   'User-Agent': 'SistemaSimulacaoZenith/1.0 (+railway.app)',
   Accept: 'application/json'
 };
+const USDT_TICKER_URL = process.env.USDT_TICKER_URL?.trim()
+  || 'https://api.binance.com/api/v3/ticker/price?symbol=USDTBRL';
+const USDT_TICKER_CACHE_MS = Math.max(2000, Number(process.env.USDT_TICKER_CACHE_MS || 3000) || 3000);
+const USDT_BRL_SPREAD_PCT = Math.max(0, Number(process.env.USDT_BRL_SPREAD_PCT ?? 0.003) || 0.003);
 const USD_USDT_FALLBACK = Number(process.env.USD_USDT_FALLBACK || 1);
 let tickerCache = { expires: 0, data: null };
+let usdRateCache = { expires: 0, data: null };
+let usdtTickerCache = { expires: 0, value: null };
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1134,10 +1140,10 @@ const normalizarMoeda = value => {
   return allowed.includes(normalized) ? normalized : 'BRL';
 };
 
-const fetchExchangeTicker = async () => {
+const fetchUsdRates = async () => {
   const now = Date.now();
-  if (tickerCache.data && tickerCache.expires > now) {
-    return tickerCache.data;
+  if (usdRateCache.data && usdRateCache.expires > now) {
+    return usdRateCache.data;
   }
 
   const controller = new AbortController();
@@ -1176,23 +1182,126 @@ const fetchExchangeTicker = async () => {
   if (!usdUsdt && Number.isFinite(USD_USDT_FALLBACK)) {
     usdUsdt = USD_USDT_FALLBACK;
   }
-  const usdtBrl = (usdUsdt ? divide(usdBrl, usdUsdt) : null);
 
-  const brlUsd = invert(usdBrl);
-  const brlUsdt = invert(usdtBrl);
-
-  const data = {
-    usdBrl,
-    usdtBrl,
-    brlUsd,
-    usdUsdt,
-    brlUsdt,
-    provider: 'ExchangeRate-API',
-    updatedAt: new Date().toISOString()
-  };
-
-  tickerCache = { data, expires: now + FX_CACHE_MS };
+  const data = { usdBrl, usdUsdt, provider: 'ExchangeRate-API' };
+  usdRateCache = { data, expires: now + FX_CACHE_MS };
   return data;
+};
+
+const fetchUsdtBrlFast = async () => {
+  const now = Date.now();
+  if (usdtTickerCache.value && usdtTickerCache.expires > now) {
+    return usdtTickerCache.value;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FX_TIMEOUT_MS);
+
+  try {
+    const response = await fetchFn(USDT_TICKER_URL, { headers: FX_HEADERS, signal: controller.signal });
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`USDT/BRL indisponível (${response.status}): ${body?.slice(0, 120)}`);
+    }
+    const payload = await response.json();
+    const price = Number(payload?.price || payload?.lastPrice || payload?.last || payload?.value);
+    if (!Number.isFinite(price)) {
+      throw new Error('USDT/BRL inválido na resposta da fonte rápida');
+    }
+    const value = { usdtBrl: price, provider: 'Binance' };
+    usdtTickerCache = { value, expires: now + USDT_TICKER_CACHE_MS };
+    return value;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const fetchExchangeTicker = async () => {
+  const now = Date.now();
+  if (tickerCache.data && tickerCache.expires > now) {
+    return tickerCache.data;
+  }
+
+  try {
+    const [usdRates, usdtFast] = await Promise.allSettled([
+      fetchUsdRates(),
+      fetchUsdtBrlFast()
+    ]);
+
+    if (usdRates.status === 'rejected') {
+      console.warn('USD/BRL indisponível na fonte principal', usdRates.reason);
+    }
+    if (usdtFast.status === 'rejected') {
+      console.warn('USDT/BRL rápido indisponível', usdtFast.reason);
+    }
+
+    const usdRatesValue = usdRates.status === 'fulfilled' ? usdRates.value : null;
+    const usdtFastValue = usdtFast.status === 'fulfilled' ? usdtFast.value : null;
+
+    let usdBrl = usdRatesValue?.usdBrl ?? null;
+    let usdUsdt = usdRatesValue?.usdUsdt ?? null;
+    let usdtBrl = usdtFastValue?.usdtBrl ?? null;
+
+    if (!usdtBrl && usdBrl && usdUsdt) {
+      usdtBrl = divide(usdBrl, usdUsdt);
+    }
+
+    if (!usdUsdt && usdBrl && usdtBrl) {
+      usdUsdt = divide(usdBrl, usdtBrl);
+    }
+
+    if (!usdUsdt && Number.isFinite(USD_USDT_FALLBACK)) {
+      usdUsdt = USD_USDT_FALLBACK;
+    }
+
+    if (!usdtBrl && usdBrl && usdUsdt) {
+      usdtBrl = divide(usdBrl, usdUsdt);
+    }
+
+    const brlUsd = invert(usdBrl);
+    const brlUsdt = invert(usdtBrl);
+
+    const data = {
+      usdBrl,
+      usdtBrl,
+      brlUsd,
+      usdUsdt,
+      brlUsdt,
+      provider: usdtFastValue?.provider || usdRatesValue?.provider || 'indefinido',
+      updatedAt: new Date().toISOString()
+    };
+
+    const nextCacheMs = Math.min(USDT_TICKER_CACHE_MS, FX_CACHE_MS);
+    tickerCache = { data, expires: now + nextCacheMs };
+    return data;
+  } catch (error) {
+    console.error('Erro ao compor ticker de câmbio', error);
+    throw error;
+  }
+};
+
+const converterUsdtParaBrlComSpread = async (amountUsdt = 0) => {
+  const qty = Number(amountUsdt);
+  if (!Number.isFinite(qty) || qty <= 0) {
+    throw new Error('Informe um valor de USDT maior que zero.');
+  }
+  const ticker = await fetchExchangeTicker();
+  const baseRate = Number(ticker?.usdtBrl);
+  if (!Number.isFinite(baseRate)) {
+    throw new Error('Taxa USDT/BRL indisponível no momento.');
+  }
+  const spreadPct = USDT_BRL_SPREAD_PCT;
+  const rateWithSpread = baseRate * (1 + spreadPct);
+  const totalBrl = qty * rateWithSpread;
+  return {
+    amountUsdt: qty,
+    baseRate,
+    spreadPct,
+    rateWithSpread,
+    totalBrl,
+    provider: ticker?.provider,
+    updatedAt: ticker?.updatedAt
+  };
 };
 
 app.get('/health', (req, res) => {
@@ -1208,6 +1317,38 @@ app.get('/cotacoes/ticker', asyncHandler(async (req, res) => {
     res.status(502).json({ message: 'Não foi possível obter cotações no momento.' });
   }
 }));
+
+const handleConversaoUsdt = asyncHandler(async (req, res) => {
+  const amountRaw = req.method === 'GET'
+    ? (req.query.amount ?? req.query.valor)
+    : (req.body?.amount ?? req.body?.valor);
+  const amount = Number(amountRaw);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ message: 'Informe um valor de USDT maior que zero.' });
+  }
+
+  try {
+    const result = await converterUsdtParaBrlComSpread(amount);
+    res.json({
+      moedaOrigem: 'USDT',
+      moedaDestino: 'BRL',
+      amountUsdt: result.amountUsdt,
+      baseRate: result.baseRate,
+      spreadPct: result.spreadPct,
+      spreadPercent: result.spreadPct * 100,
+      rateWithSpread: result.rateWithSpread,
+      totalBrl: result.totalBrl,
+      provider: result.provider,
+      updatedAt: result.updatedAt
+    });
+  } catch (error) {
+    console.error('Falha na conversão USDT/BRL', error);
+    res.status(502).json({ message: error.message || 'Não foi possível converter no momento.' });
+  }
+});
+
+app.get('/cambio/converter', handleConversaoUsdt);
+app.post('/cambio/converter', handleConversaoUsdt);
 
 app.post('/invoices/generate', authenticate, adminOnly, asyncHandler(async (req, res) => {
   const body = req.body || {};
