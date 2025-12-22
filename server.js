@@ -1175,16 +1175,82 @@ const fetchExchangeTicker = async () => {
       return payload;
     };
 
-    let prices = null;
+    const fetchMercadoBitcoin = async () => {
+      const url = 'https://api.mercadobitcoin.net/api/v4/tickers?symbols=USDT-BRL,BTC-BRL,ETH-BRL';
+      const res = await fetchWithTimeout(url, FX_HEADERS);
+      const payload = await res.json();
+      if (!Array.isArray(payload)) {
+        throw new Error('Resposta inválida do Mercado Bitcoin');
+      }
+      const map = {};
+      payload.forEach(t => {
+        if (!t?.pair) return;
+        map[t.pair] = {
+          buy: toNumber(t.buy),
+          raw: t
+        };
+      });
+      return map;
+    };
+
+    const fetchBinanceBook = async (symbol) => {
+      const url = `https://api.binance.com/api/v3/ticker/bookTicker?symbol=${symbol}`;
+      const res = await fetchWithTimeout(url, FX_HEADERS);
+      const payload = await res.json();
+      if (!payload || !payload.bidPrice) {
+        throw new Error(`Binance bookTicker sem bidPrice para ${symbol}`);
+      }
+      return { bid: toNumber(payload.bidPrice), raw: payload };
+    };
+
+    const prices = { usdt: null, btc: null, eth: null };
+    const rawSources = {};
+    let provider = null;
+
     try {
-      prices = await fetchCryptoCompare();
+      const mbt = await fetchMercadoBitcoin();
+      const usdt = mbt['USDT-BRL']?.buy;
+      const btc = mbt['BTC-BRL']?.buy;
+      const eth = mbt['ETH-BRL']?.buy;
+      if (Number.isFinite(usdt)) prices.usdt = usdt;
+      if (Number.isFinite(btc)) prices.btc = btc;
+      if (Number.isFinite(eth)) prices.eth = eth;
+      rawSources.mercadoBitcoin = mbt;
+      provider = 'MercadoBitcoin buy';
+    } catch (err) {
+      console.error('Mercado Bitcoin falhou (tentará Binance/CC)', err.message || err);
+    }
+
+    try {
+      const [usdt, btc, eth] = await Promise.all([
+        fetchBinanceBook('USDTBRL'),
+        fetchBinanceBook('BTCBRL'),
+        fetchBinanceBook('ETHBRL')
+      ]);
+      prices.usdt = usdt.bid;
+      prices.btc = btc.bid;
+      prices.eth = eth.bid;
+      rawSources.binance = { usdt: usdt.raw, btc: btc.raw, eth: eth.raw };
+      provider = 'Binance bid';
+    } catch (err) {
+      console.error('Binance falhou (tentará CryptoCompare)', err.message || err);
+    }
+
+    let ccPayload = null;
+    try {
+      ccPayload = await fetchCryptoCompare();
     } catch (err) {
       console.error('CryptoCompare falhou', err.message || err);
     }
 
-    const rawUsdtBrl = toNumber(prices?.USDT?.BRL);
-    const rawBtcBrl = toNumber(prices?.BTC?.BRL);
-    const rawEthBrl = toNumber(prices?.ETH?.BRL);
+    if (!Number.isFinite(prices.usdt)) prices.usdt = toNumber(ccPayload?.USDT?.BRL);
+    if (!Number.isFinite(prices.btc)) prices.btc = toNumber(ccPayload?.BTC?.BRL);
+    if (!Number.isFinite(prices.eth)) prices.eth = toNumber(ccPayload?.ETH?.BRL);
+    if (ccPayload) rawSources.cryptoCompare = ccPayload;
+
+    const rawUsdtBrl = prices.usdt;
+    const rawBtcBrl = prices.btc;
+    const rawEthBrl = prices.eth;
 
     let usdBrl = null;
     let usdUsdt = null;
@@ -1207,9 +1273,9 @@ const fetchExchangeTicker = async () => {
       brlUsdt,
       btcBrl: Number.isFinite(rawBtcBrl) ? rawBtcBrl : (Number.isFinite(previous?.btcBrl) ? previous.btcBrl : null),
       ethBrl: Number.isFinite(rawEthBrl) ? rawEthBrl : (Number.isFinite(previous?.ethBrl) ? previous.ethBrl : null),
-      provider: 'CryptoCompare (Binance)',
+      provider: provider || 'CryptoCompare (Binance)',
       updatedAt: new Date().toISOString(),
-      raw: prices || null
+      raw: Object.keys(rawSources).length ? rawSources : null
     };
 
     if (!Number.isFinite(data.usdtBrl)) {
