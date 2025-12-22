@@ -298,17 +298,32 @@
     const track = el('tickerTrack');
     if (!track) return;
 
+    const baseUsdtBrl = Number(data?.usdtBrl);
+    const spreadUsdtBrl = Number.isFinite(baseUsdtBrl) ? baseUsdtBrl * (1 + USDT_SPREAD_PCT) : null;
+    const updatedAtText = (() => {
+      try {
+        const d = data?.updatedAt ? new Date(data.updatedAt) : new Date();
+        return d.toLocaleTimeString('pt-BR', { hour12: false });
+      } catch (error) {
+        return '';
+      }
+    })();
+
     const pairs = [
+      { label: 'USDT/BRL (base)', value: baseUsdtBrl },
+      { label: 'USDT/BRL (c/ spread)', value: spreadUsdtBrl },
       { label: 'USD/BRL', value: data?.usdBrl },
-      { label: 'USD/USDT', value: data?.usdUsdt },
-      { label: 'USDT/BRL', value: data?.usdtBrl }
+      { label: 'USD/USDT', value: data?.usdUsdt }
     ];
 
     const content = pairs
       .map(item => `<span class="ticker-item"><strong>${item.label}</strong><span class="ticker-value">${formatTickerValue(item.value)}</span></span>`)
       .join('<span class="ticker-item">|</span>');
 
-    track.innerHTML = content ? `${content}${content}` : '<span class="ticker-item">Cotações indisponíveis</span>';
+    const updatedLabel = updatedAtText ? `<span class="ticker-item"><strong>Atualizado</strong><span class="ticker-value">${updatedAtText}</span></span>` : '';
+    const fullContent = [updatedLabel, content].filter(Boolean).join('<span class="ticker-item">|</span>');
+
+    track.innerHTML = fullContent ? `${fullContent}${fullContent}` : '<span class="ticker-item">Cotações indisponíveis</span>';
   };
 
   const atualizarBarraTicker = () => {

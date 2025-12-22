@@ -541,18 +541,19 @@
         <div class="login-box">
             <div class="login-logo"><img src="zenith-logo.png" alt="Zenith" style="height: 50px; display: block; margin: 0 auto 10px;"></div>
             <div class="login-subtitle">Sistema de Cotação Mobile v4.0</div>
-            
-            <div class="form-group">
-                <label class="form-label">Usuário</label>
-                <input type="text" class="form-input" id="loginUser" placeholder="Digite seu usuário">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Senha</label>
-                <input type="password" class="form-input" id="loginPass" placeholder="Digite sua senha">
-            </div>
-            
-            <button class="btn btn-primary" onclick="fazerLogin()">🔐 Entrar</button>
+            <form onsubmit="event.preventDefault(); fazerLogin();">
+                <div class="form-group">
+                    <label class="form-label">Usuário</label>
+                    <input type="text" class="form-input" id="loginUser" placeholder="Digite seu usuário">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Senha</label>
+                    <input type="password" class="form-input" id="loginPass" placeholder="Digite sua senha">
+                </div>
+                
+                <button type="submit" class="btn btn-primary">🔐 Entrar</button>
+            </form>
             
             <div style="margin-top: 15px; text-align: center; font-size: 11px; color: var(--text-secondary);">
                 Utilize seu <strong>CPF ou chave PIX</strong> com a senha definida pelo administrador.
