@@ -298,8 +298,6 @@
     const track = el('tickerTrack');
     if (!track) return;
 
-    const baseUsdtBrl = Number(data?.usdtBrl);
-    const spreadUsdtBrl = Number.isFinite(baseUsdtBrl) ? baseUsdtBrl * (1 + USDT_SPREAD_PCT) : null;
     const updatedAtText = (() => {
       try {
         const d = data?.updatedAt ? new Date(data.updatedAt) : new Date();
@@ -310,10 +308,9 @@
     })();
 
     const pairs = [
-      { label: 'USDT/BRL (base)', value: baseUsdtBrl },
-      { label: 'USDT/BRL (c/ spread)', value: spreadUsdtBrl },
-      { label: 'USD/BRL', value: data?.usdBrl },
-      { label: 'USD/USDT', value: data?.usdUsdt }
+      { label: 'USDT/BRL', value: data?.usdtBrl },
+      { label: 'BTC/BRL', value: data?.btcBrl },
+      { label: 'ETH/BRL', value: data?.ethBrl }
     ];
 
     const content = pairs
@@ -359,8 +356,9 @@
       if (!response.ok) {
         throw new Error('Não foi possível consultar as cotações.');
       }
-      const data = await response.json();
-      state.ticker = data;
+    const data = await response.json();
+    state.ticker = data;
+    state.tickerUpdatedAt = Date.now();
       state.tickerUpdatedAt = Date.now();
       renderTicker(data);
       if (temCotacaoMultiUI() || el('cotacaoServico')) {
@@ -2148,36 +2146,19 @@
       : servico.valor;
     const deveConverterUsdt = servicoUsdtBras(servico) && moedaBase === 'USDT';
     const taxaUsdtSpread = deveConverterUsdt ? obterTaxaUsdtBrlComSpread(spreadPctServico) : null;
-    if (deveConverterUsdt && !Number.isFinite(taxaUsdtSpread)) {
-      setText('resultCusto', '--');
-      setText('resultVenda', '--');
-      setText('resultMargem', '--');
-      setText('resultComissao', '--');
-      setText('resultComissaoPercent', `${comissaoPercent.toFixed(1)}%`);
-      setText('resultFinal', 'Cotação USDT/BRL indisponível');
-      state.cotacaoUsdtBase = null;
-      state.cotacaoUsdtBrl = null;
-      atualizarResumoCambio(true);
-      return;
-    }
-
-    const fatorConversao = taxaUsdtSpread || 1;
-    const moedaDisplay = taxaUsdtSpread ? 'BRL' : moedaBase;
-    const custoCalc = deveConverterUsdt && Number.isFinite(taxaUsdtSpread)
-      ? valorVenda * taxaUsdtSpread
-      : custo * fatorConversao;
-    const vendaCalc = valorVenda * fatorConversao;
+    const custoCalc = custo;
+    const vendaCalc = valorVenda;
     const margem = vendaCalc - custoCalc;
     const comissao = vendaCalc * (comissaoPercent / 100);
     setValue('custoDisplay', servico.tipoCusto === 'percentual'
       ? `${servico.valor}% de ${formatCurrencyByMoeda(valorVenda, moedaBase)} = ${formatCurrencyByMoeda(custo, moedaBase)}`
       : formatCurrencyByMoeda(custo, moedaBase));
-    setText('resultCusto', formatCurrencyByMoeda(custoCalc, moedaDisplay));
-    setText('resultVenda', formatCurrencyByMoeda(vendaCalc, moedaDisplay));
-    setText('resultMargem', formatCurrencyByMoeda(margem, moedaDisplay));
+    setText('resultCusto', formatCurrencyByMoeda(custoCalc, moedaBase));
+    setText('resultVenda', formatCurrencyByMoeda(vendaCalc, moedaBase));
+    setText('resultMargem', formatCurrencyByMoeda(margem, moedaBase));
     setText('resultComissaoPercent', `${comissaoPercent.toFixed(1)}%`);
-    setText('resultComissao', formatCurrencyByMoeda(comissao, moedaDisplay));
-    setText('resultFinal', formatCurrencyByMoeda(vendaCalc, moedaDisplay));
+    setText('resultComissao', formatCurrencyByMoeda(comissao, moedaBase));
+    setText('resultFinal', formatCurrencyByMoeda(vendaCalc, moedaBase));
     const deveExibirCambio = servicoUsdtBras(servico);
     if (deveExibirCambio && Number.isFinite(Number(taxaUsdtSpread || state.ticker?.usdtBrl))) {
       state.cotacaoUsdtBase = Number(state.ticker?.usdtBrl) || null;
@@ -2230,7 +2211,7 @@
       return;
     }
 
-    let ultimaBase = null;
+    const ultimaBase = Number.isFinite(baseUsdt) ? baseUsdt : null;
     let ultimaSpread = null;
 
     const itensConvertidos = itensDetalhados.map(item => {
@@ -2240,16 +2221,13 @@
           ? Number(item.servico.valor || 0) / 100
           : USDT_SPREAD_PCT;
         const taxa = baseUsdt * (1 + spreadPct);
-        ultimaBase = baseUsdt;
         ultimaSpread = taxa;
-        const valorBrl = item.valorVenda * taxa;
-        const custoBrl = valorBrl; // custo real é a conversão com spread
         return {
           ...item,
-          valorDisplay: valorBrl,
-          custoDisplay: custoBrl,
-          margemDisplay: valorBrl - custoBrl,
-          moedaDisplay: 'BRL'
+          valorDisplay: item.valorVenda,
+          custoDisplay: item.valorVenda * spreadPct,
+          margemDisplay: item.valorVenda - (item.valorVenda * spreadPct),
+          moedaDisplay: moedaBase
         };
       }
       return {
@@ -2287,7 +2265,7 @@
     }), { custo: 0, venda: 0, margem: 0 });
 
     const comissaoTotal = totais.venda * (comissaoPercent / 100);
-    const moedaTotais = ultimaSpread ? 'BRL' : moedaBase;
+    const moedaTotais = moedaBase;
     setText('resultCusto', formatCurrencyByMoeda(totais.custo, moedaTotais));
     setText('resultVenda', formatCurrencyByMoeda(totais.venda, moedaTotais));
     setText('resultMargem', formatCurrencyByMoeda(totais.margem, moedaTotais));

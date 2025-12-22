@@ -38,13 +38,6 @@ const prisma = new PrismaClient({ adapter });
 
 const FX_CACHE_MS = Math.max(5000, Number(process.env.RATE_CACHE_MS || 5000) || 5000);
 const FX_TIMEOUT_MS = Math.max(5000, Number(process.env.RATE_TIMEOUT_MS || 8000));
-const EXCHANGE_RATE_API_KEY = process.env.EXCHANGE_RATE_API_KEY?.trim();
-const EXCHANGE_RATE_BASE = 'USD';
-const EXCHANGE_RATE_FALLBACK_URL = `https://open.er-api.com/v6/latest/${EXCHANGE_RATE_BASE}`;
-const EXCHANGE_RATE_URL = process.env.EXCHANGE_RATE_API_URL?.trim()
-  || (EXCHANGE_RATE_API_KEY
-    ? `https://v6.exchangerate-api.com/v6/${EXCHANGE_RATE_API_KEY}/latest/${EXCHANGE_RATE_BASE}`
-    : EXCHANGE_RATE_FALLBACK_URL);
 const FX_HEADERS = {
   'User-Agent': 'SistemaSimulacaoZenith/1.0 (+railway.app)',
   Accept: 'application/json'
@@ -55,7 +48,6 @@ const USDT_TICKER_CACHE_MS = Math.max(2000, Number(process.env.USDT_TICKER_CACHE
 const USDT_BRL_SPREAD_PCT = Math.max(0, Number(process.env.USDT_BRL_SPREAD_PCT ?? 0.003) || 0.003);
 const USD_USDT_FALLBACK = Number(process.env.USD_USDT_FALLBACK || 1);
 let tickerCache = { expires: 0, data: null };
-let usdRateCache = { expires: 0, data: null };
 let usdtTickerCache = { expires: 0, value: null };
 
 const app = express();
@@ -1140,54 +1132,6 @@ const normalizarMoeda = value => {
   return allowed.includes(normalized) ? normalized : 'BRL';
 };
 
-const fetchUsdRates = async () => {
-  const now = Date.now();
-  if (usdRateCache.data && usdRateCache.expires > now) {
-    return usdRateCache.data;
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FX_TIMEOUT_MS);
-
-  let response;
-  try {
-    response = await fetchFn(EXCHANGE_RATE_URL, { headers: FX_HEADERS, signal: controller.signal });
-  } catch (fetchError) {
-    console.error('Erro de rede ao consultar a ExchangeRate-API', fetchError);
-    throw new Error('Falha ao consultar a ExchangeRate-API (rede indisponível)');
-  } finally {
-    clearTimeout(timeout);
-  }
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    console.error('ExchangeRate-API respondeu com erro', response.status, body);
-    throw new Error(`Falha ao consultar a ExchangeRate-API (${response.status})`);
-  }
-
-  const payload = await response.json();
-  const rates = payload?.conversion_rates || payload?.rates;
-  if (!rates || typeof rates !== 'object') {
-    throw new Error('Resposta inválida da ExchangeRate-API (sem taxas)');
-  }
-  const usdBrlRaw = Number(rates?.BRL);
-  const usdUsdtRaw = Number(rates?.USDT);
-
-  if (!Number.isFinite(usdBrlRaw)) {
-    throw new Error('Resposta inválida da ExchangeRate-API (sem taxa BRL)');
-  }
-
-  const usdBrl = usdBrlRaw;
-  let usdUsdt = Number.isFinite(usdUsdtRaw) ? usdUsdtRaw : null;
-  if (!usdUsdt && Number.isFinite(USD_USDT_FALLBACK)) {
-    usdUsdt = USD_USDT_FALLBACK;
-  }
-
-  const data = { usdBrl, usdUsdt, provider: 'ExchangeRate-API' };
-  usdRateCache = { data, expires: now + FX_CACHE_MS };
-  return data;
-};
-
 const fetchUsdtBrlFast = async () => {
   const now = Date.now();
   if (usdtTickerCache.value && usdtTickerCache.expires > now) {
@@ -1223,40 +1167,48 @@ const fetchExchangeTicker = async () => {
   }
 
   try {
-    const [usdRates, usdtFast] = await Promise.allSettled([
-      fetchUsdRates(),
-      fetchUsdtBrlFast()
+    const fetchBinancePrice = async (symbol) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), FX_TIMEOUT_MS);
+      try {
+        const response = await fetchFn(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`, {
+          headers: FX_HEADERS,
+          signal: controller.signal
+        });
+        if (!response.ok) {
+          const body = await response.text().catch(() => '');
+          throw new Error(`Ticker ${symbol} indisponível (${response.status}): ${body?.slice(0, 120)}`);
+        }
+        const payload = await response.json();
+        const price = Number(payload?.price || payload?.lastPrice || payload?.last || payload?.value);
+        if (!Number.isFinite(price)) {
+          throw new Error(`Preço inválido para ${symbol}`);
+        }
+        return price;
+      } finally {
+        clearTimeout(timeout);
+      }
+    };
+
+    const [usdtFast, btcPrice, ethPrice] = await Promise.allSettled([
+      fetchUsdtBrlFast(),
+      fetchBinancePrice('BTCBRL'),
+      fetchBinancePrice('ETHBRL')
     ]);
 
-    if (usdRates.status === 'rejected') {
-      console.warn('USD/BRL indisponível na fonte principal', usdRates.reason);
-    }
     if (usdtFast.status === 'rejected') {
       console.warn('USDT/BRL rápido indisponível', usdtFast.reason);
     }
 
-    const usdRatesValue = usdRates.status === 'fulfilled' ? usdRates.value : null;
     const usdtFastValue = usdtFast.status === 'fulfilled' ? usdtFast.value : null;
+    const btcBrl = btcPrice.status === 'fulfilled' ? btcPrice.value : null;
+    const ethBrl = ethPrice.status === 'fulfilled' ? ethPrice.value : null;
 
-    let usdBrl = usdRatesValue?.usdBrl ?? null;
-    let usdUsdt = usdRatesValue?.usdUsdt ?? null;
+    let usdBrl = null;
+    let usdUsdt = null;
     let usdtBrl = usdtFastValue?.usdtBrl ?? null;
 
-    if (!usdtBrl && usdBrl && usdUsdt) {
-      usdtBrl = divide(usdBrl, usdUsdt);
-    }
-
-    if (!usdUsdt && usdBrl && usdtBrl) {
-      usdUsdt = divide(usdBrl, usdtBrl);
-    }
-
-    if (!usdUsdt && Number.isFinite(USD_USDT_FALLBACK)) {
-      usdUsdt = USD_USDT_FALLBACK;
-    }
-
-    if (!usdtBrl && usdBrl && usdUsdt) {
-      usdtBrl = divide(usdBrl, usdUsdt);
-    }
+    if (!usdUsdt && Number.isFinite(USD_USDT_FALLBACK)) usdUsdt = USD_USDT_FALLBACK;
 
     const brlUsd = invert(usdBrl);
     const brlUsdt = invert(usdtBrl);
@@ -1267,7 +1219,9 @@ const fetchExchangeTicker = async () => {
       brlUsd,
       usdUsdt,
       brlUsdt,
-      provider: usdtFastValue?.provider || usdRatesValue?.provider || 'indefinido',
+      btcBrl,
+      ethBrl,
+      provider: usdtFastValue?.provider || 'Binance',
       updatedAt: new Date().toISOString()
     };
 
