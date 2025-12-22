@@ -2052,21 +2052,26 @@
     return nome.includes('usdt') && (nome.includes('bras') || nome.includes('brasil') || nome.includes('brás'));
   };
 
-  const obterTaxaUsdtBrlComSpread = () => {
+  const obterTaxaUsdtBrlComSpread = (spreadPctOverride) => {
     const base = Number(state.ticker?.usdtBrl);
     if (!Number.isFinite(base)) return null;
-    return base * (1 + USDT_SPREAD_PCT);
+    const spreadPct = Number.isFinite(Number(spreadPctOverride))
+      ? Number(spreadPctOverride)
+      : USDT_SPREAD_PCT;
+    return base * (1 + spreadPct);
   };
 
   const atualizarResumoCambio = alvo => {
     const desktopWrapper = document.querySelector('[data-cambio-wrapper]');
     const desktopValor = document.querySelector('[data-cambio-value]');
+    const desktopBase = document.querySelector('[data-cambio-base]');
     const mobileWrapper = el('cotacaoCambioWrapperMobile');
     const mobileValor = el('resultUsdtBrlMobile');
+    const mobileBase = el('resultUsdtBrlBaseMobile');
 
     const targets = [
-      { wrapper: desktopWrapper, value: desktopValor },
-      { wrapper: mobileWrapper, value: mobileValor }
+      { wrapper: desktopWrapper, value: desktopValor, base: desktopBase },
+      { wrapper: mobileWrapper, value: mobileValor, base: mobileBase }
     ];
 
     const deveExibir = typeof alvo === 'boolean'
@@ -2081,18 +2086,19 @@
     const spreadRate = Number.isFinite(Number(state.cotacaoUsdtBrl))
       ? Number(state.cotacaoUsdtBrl)
       : (Number.isFinite(baseRate) ? baseRate * (1 + USDT_SPREAD_PCT) : null);
-    const textoValor = Number.isFinite(baseRate)
-      ? `Base: R$ ${formatFxRate(baseRate)} | c/ spread: R$ ${formatFxRate(spreadRate)}`
-      : '--';
+    const textoBase = Number.isFinite(baseRate) ? `R$ ${formatFxRate(baseRate)}` : '--';
+    const textoSpread = Number.isFinite(spreadRate) ? `R$ ${formatFxRate(spreadRate)} (c/ spread)` : '--';
 
     targets.forEach(target => {
       if (!target.wrapper || !target.value) return;
       if (!deveExibir) {
         target.wrapper.style.display = 'none';
-        target.value.textContent = '--';
+        if (target.value) target.value.textContent = '--';
+        if (target.base) target.base.textContent = '--';
         return;
       }
-      target.value.textContent = textoValor;
+      if (target.base) target.base.textContent = `Cotação atual: ${textoBase}`;
+      target.value.textContent = `Valor c/ spread: ${textoSpread}`;
       target.wrapper.style.display = 'flex';
     });
   };
@@ -2119,11 +2125,14 @@
     }
     const servico = state.servicos.find(s => s.id === servicoId);
     if (!servico) return;
+    const spreadPctServico = servico.tipoCusto === 'percentual'
+      ? Number(servico.valor || 0) / 100
+      : null;
     const custo = servico.tipoCusto === 'percentual'
       ? valorVenda * (servico.valor / 100)
       : servico.valor;
     const deveConverterUsdt = servicoUsdtBras(servico) && moedaBase === 'USDT';
-    const taxaUsdtSpread = deveConverterUsdt ? obterTaxaUsdtBrlComSpread() : null;
+    const taxaUsdtSpread = deveConverterUsdt ? obterTaxaUsdtBrlComSpread(spreadPctServico) : null;
     if (deveConverterUsdt && !Number.isFinite(taxaUsdtSpread)) {
       setText('resultCusto', '--');
       setText('resultVenda', '--');
@@ -2139,7 +2148,9 @@
 
     const fatorConversao = taxaUsdtSpread || 1;
     const moedaDisplay = taxaUsdtSpread ? 'BRL' : moedaBase;
-    const custoCalc = custo * fatorConversao;
+    const custoCalc = deveConverterUsdt && Number.isFinite(taxaUsdtSpread)
+      ? valorVenda * taxaUsdtSpread
+      : custo * fatorConversao;
     const vendaCalc = valorVenda * fatorConversao;
     const margem = vendaCalc - custoCalc;
     const comissao = vendaCalc * (comissaoPercent / 100);
@@ -2187,11 +2198,11 @@
       })
       .filter(Boolean);
 
+    const baseUsdt = Number(state.ticker?.usdtBrl);
     const hasUsdtBras = itensDetalhados.some(item => servicoUsdtBras(item.servico));
     const deveConverterUsdt = hasUsdtBras && moedaBase === 'USDT';
-    const taxaUsdtSpread = deveConverterUsdt ? obterTaxaUsdtBrlComSpread() : null;
 
-    if (deveConverterUsdt && !Number.isFinite(taxaUsdtSpread)) {
+    if (deveConverterUsdt && !Number.isFinite(baseUsdt)) {
       setText('resultCusto', '--');
       setText('resultVenda', '--');
       setText('resultMargem', '--');
@@ -2204,11 +2215,20 @@
       return;
     }
 
+    let ultimaBase = null;
+    let ultimaSpread = null;
+
     const itensConvertidos = itensDetalhados.map(item => {
       const isUsdtBras = servicoUsdtBras(item.servico);
-      if (deveConverterUsdt && isUsdtBras && taxaUsdtSpread) {
-        const valorBrl = item.valorVenda * taxaUsdtSpread;
-        const custoBrl = item.custo * taxaUsdtSpread;
+      if (deveConverterUsdt && isUsdtBras && Number.isFinite(baseUsdt)) {
+        const spreadPct = item.servico.tipoCusto === 'percentual'
+          ? Number(item.servico.valor || 0) / 100
+          : USDT_SPREAD_PCT;
+        const taxa = baseUsdt * (1 + spreadPct);
+        ultimaBase = baseUsdt;
+        ultimaSpread = taxa;
+        const valorBrl = item.valorVenda * taxa;
+        const custoBrl = valorBrl; // custo real é a conversão com spread
         return {
           ...item,
           valorDisplay: valorBrl,
@@ -2252,7 +2272,7 @@
     }), { custo: 0, venda: 0, margem: 0 });
 
     const comissaoTotal = totais.venda * (comissaoPercent / 100);
-    const moedaTotais = taxaUsdtSpread ? 'BRL' : moedaBase;
+    const moedaTotais = ultimaSpread ? 'BRL' : moedaBase;
     setText('resultCusto', formatCurrencyByMoeda(totais.custo, moedaTotais));
     setText('resultVenda', formatCurrencyByMoeda(totais.venda, moedaTotais));
     setText('resultMargem', formatCurrencyByMoeda(totais.margem, moedaTotais));
@@ -2261,9 +2281,9 @@
     setText('resultFinal', formatCurrencyByMoeda(totais.venda, moedaTotais));
 
     const deveExibirCambio = itensConvertidos.some(item => servicoUsdtBras(item.servico));
-    if (deveExibirCambio && Number.isFinite(Number(taxaUsdtSpread || state.ticker?.usdtBrl))) {
-      state.cotacaoUsdtBase = Number(state.ticker?.usdtBrl) || null;
-      state.cotacaoUsdtBrl = taxaUsdtSpread || Number(state.ticker.usdtBrl);
+    if (deveExibirCambio && Number.isFinite(Number(ultimaSpread || baseUsdt))) {
+      state.cotacaoUsdtBase = ultimaBase ?? baseUsdt ?? null;
+      state.cotacaoUsdtBrl = ultimaSpread || baseUsdt;
     } else if (!deveExibirCambio) {
       state.cotacaoUsdtBase = null;
       state.cotacaoUsdtBrl = null;
