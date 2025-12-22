@@ -1330,6 +1330,7 @@ app.get('/health', (req, res) => {
 app.get('/cotacoes/ticker', asyncHandler(async (req, res) => {
   try {
     const ticker = await fetchExchangeTicker();
+    res.set('Cache-Control', 'no-store');
     res.json(ticker);
   } catch (error) {
     console.error('Erro ao buscar cotações', error);

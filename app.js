@@ -353,7 +353,7 @@
 
   const fetchTicker = async () => {
     try {
-      const response = await fetch('/cotacoes/ticker');
+      const response = await fetch('/cotacoes/ticker', { cache: 'no-store' });
       if (!response.ok) {
         throw new Error('Não foi possível consultar as cotações.');
       }
