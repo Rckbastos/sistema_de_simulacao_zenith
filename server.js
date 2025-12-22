@@ -50,7 +50,7 @@ const FX_HEADERS = {
   Accept: 'application/json'
 };
 const USDT_TICKER_URL = process.env.USDT_TICKER_URL?.trim()
-  || 'https://api.binance.com/api/v3/avgPrice?symbol=USDTBRL';
+  || 'https://api.binance.com/api/v3/ticker/price?symbol=USDTBRL';
 const USDT_TICKER_CACHE_MS = Math.max(2000, Number(process.env.USDT_TICKER_CACHE_MS || 3000) || 3000);
 const USDT_BRL_SPREAD_PCT = Math.max(0, Number(process.env.USDT_BRL_SPREAD_PCT ?? 0.003) || 0.003);
 const USD_USDT_FALLBACK = Number(process.env.USD_USDT_FALLBACK || 1);

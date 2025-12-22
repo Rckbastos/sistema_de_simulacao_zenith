@@ -207,7 +207,7 @@
     minimumFractionDigits: 4,
     maximumFractionDigits: 4
   });
-  const TICKER_REFRESH_MS = 5000;
+  const TICKER_REFRESH_MS = 10000;
   const USDT_SPREAD_PCT = 0.003; // 0.30% spread
   let tickerTimer = null;
   let tickerStatusTimer = null;
