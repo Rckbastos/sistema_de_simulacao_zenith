@@ -1144,33 +1144,60 @@ const fetchExchangeTicker = async () => {
   const previous = tickerCache.data;
 
   try {
-    const fetchBinancePrice = async (symbol) => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), FX_TIMEOUT_MS);
+    const fetchPrice = async (symbol) => {
+      const fetchWithTimeout = async (url) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), FX_TIMEOUT_MS);
+        try {
+          const response = await fetchFn(url, { headers: FX_HEADERS, signal: controller.signal });
+          if (!response.ok) {
+            const body = await response.text().catch(() => '');
+            throw new Error(`${url} respondeu ${response.status}: ${body?.slice(0, 120)}`);
+          }
+          return response;
+        } finally {
+          clearTimeout(timeout);
+        }
+      };
+
+      // 1) Binance spot
       try {
-        const response = await fetchFn(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`, {
-          headers: FX_HEADERS,
-          signal: controller.signal
-        });
-        if (!response.ok) {
-          const body = await response.text().catch(() => '');
-          throw new Error(`Ticker ${symbol} indisponível (${response.status}): ${body?.slice(0, 120)}`);
-        }
-        const payload = await response.json();
+        const res = await fetchWithTimeout(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
+        const payload = await res.json();
         const price = Number(payload?.price || payload?.lastPrice || payload?.last || payload?.value);
-        if (!Number.isFinite(price)) {
-          throw new Error(`Preço inválido para ${symbol}`);
-        }
-        return price;
-      } finally {
-        clearTimeout(timeout);
+        if (Number.isFinite(price)) return price;
+      } catch (err) {
+        console.warn(`Binance falhou para ${symbol}`, err.message || err);
       }
+
+      // 2) OKX
+      try {
+        const okxSymbol = symbol.replace('BRL', '-BRL'); // ex: USDTBRL -> USDT-BRL
+        const res = await fetchWithTimeout(`https://www.okx.com/api/v5/market/ticker?instId=${okxSymbol}`);
+        const payload = await res.json();
+        const price = Number(payload?.data?.[0]?.last);
+        if (Number.isFinite(price)) return price;
+      } catch (err) {
+        console.warn(`OKX falhou para ${symbol}`, err.message || err);
+      }
+
+      // 3) Bybit spot
+      try {
+        const res = await fetchWithTimeout(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${symbol}`);
+        const payload = await res.json();
+        const price = Number(payload?.result?.list?.[0]?.lastPrice);
+        if (Number.isFinite(price)) return price;
+      } catch (err) {
+        console.warn(`Bybit falhou para ${symbol}`, err.message || err);
+      }
+
+      throw new Error(`Nenhuma fonte retornou preço para ${symbol}`);
     };
 
     const [usdtPrice, btcPrice, ethPrice] = await Promise.allSettled([
-      fetchBinancePrice('USDTBRL'),
-      fetchBinancePrice('BTCBRL'),
-      fetchBinancePrice('ETHBRL')
+      fetchPrice('USDTBRL'),
+      fetchPrice('BTCBRL'),
+      fetchPrice('ETHBRL')
     ]);
 
     if (usdtPrice.status === 'rejected') {
