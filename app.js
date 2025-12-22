@@ -289,6 +289,7 @@
   const temInvoiceUI = () => Boolean(el('invoiceItensContainer'));
 
   const formatTickerValue = value => {
+    if (value === null || value === undefined) return '--';
     const num = Number(value);
     if (!Number.isFinite(num)) return '--';
     return tickerFormatter.format(num);
@@ -2146,19 +2147,38 @@
       : servico.valor;
     const deveConverterUsdt = servicoUsdtBras(servico) && moedaBase === 'USDT';
     const taxaUsdtSpread = deveConverterUsdt ? obterTaxaUsdtBrlComSpread(spreadPctServico) : null;
-    const custoCalc = custo;
-    const vendaCalc = valorVenda;
+    if (deveConverterUsdt && !Number.isFinite(taxaUsdtSpread)) {
+      setText('resultCusto', '--');
+      setText('resultVenda', '--');
+      setText('resultMargem', '--');
+      setText('resultComissao', '--');
+      setText('resultComissaoPercent', `${comissaoPercent.toFixed(1)}%`);
+      setText('resultFinal', 'Cotação USDT/BRL indisponível');
+      state.cotacaoUsdtBase = null;
+      state.cotacaoUsdtBrl = null;
+      atualizarResumoCambio(true);
+      return;
+    }
+
+    const fatorConversao = taxaUsdtSpread || 1;
+    const moedaDisplay = taxaUsdtSpread ? 'BRL' : moedaBase;
+    const custoCalc = deveConverterUsdt && Number.isFinite(taxaUsdtSpread)
+      ? valorVenda * taxaUsdtSpread
+      : custo * fatorConversao;
+    const vendaCalc = deveConverterUsdt && Number.isFinite(taxaUsdtSpread)
+      ? valorVenda * taxaUsdtSpread
+      : valorVenda * fatorConversao;
     const margem = vendaCalc - custoCalc;
     const comissao = vendaCalc * (comissaoPercent / 100);
     setValue('custoDisplay', servico.tipoCusto === 'percentual'
       ? `${servico.valor}% de ${formatCurrencyByMoeda(valorVenda, moedaBase)} = ${formatCurrencyByMoeda(custo, moedaBase)}`
       : formatCurrencyByMoeda(custo, moedaBase));
-    setText('resultCusto', formatCurrencyByMoeda(custoCalc, moedaBase));
-    setText('resultVenda', formatCurrencyByMoeda(vendaCalc, moedaBase));
-    setText('resultMargem', formatCurrencyByMoeda(margem, moedaBase));
+    setText('resultCusto', formatCurrencyByMoeda(custoCalc, moedaDisplay));
+    setText('resultVenda', formatCurrencyByMoeda(vendaCalc, moedaDisplay));
+    setText('resultMargem', formatCurrencyByMoeda(margem, moedaDisplay));
     setText('resultComissaoPercent', `${comissaoPercent.toFixed(1)}%`);
-    setText('resultComissao', formatCurrencyByMoeda(comissao, moedaBase));
-    setText('resultFinal', formatCurrencyByMoeda(vendaCalc, moedaBase));
+    setText('resultComissao', formatCurrencyByMoeda(comissao, moedaDisplay));
+    setText('resultFinal', formatCurrencyByMoeda(vendaCalc, moedaDisplay));
     const deveExibirCambio = servicoUsdtBras(servico);
     if (deveExibirCambio && Number.isFinite(Number(taxaUsdtSpread || state.ticker?.usdtBrl))) {
       state.cotacaoUsdtBase = Number(state.ticker?.usdtBrl) || null;
@@ -2222,12 +2242,13 @@
           : USDT_SPREAD_PCT;
         const taxa = baseUsdt * (1 + spreadPct);
         ultimaSpread = taxa;
+        const valorConvertido = item.valorVenda * taxa;
         return {
           ...item,
-          valorDisplay: item.valorVenda,
-          custoDisplay: item.valorVenda * spreadPct,
-          margemDisplay: item.valorVenda - (item.valorVenda * spreadPct),
-          moedaDisplay: moedaBase
+          valorDisplay: valorConvertido,
+          custoDisplay: valorConvertido,
+          margemDisplay: 0,
+          moedaDisplay: 'BRL'
         };
       }
       return {
@@ -2265,7 +2286,7 @@
     }), { custo: 0, venda: 0, margem: 0 });
 
     const comissaoTotal = totais.venda * (comissaoPercent / 100);
-    const moedaTotais = moedaBase;
+    const moedaTotais = ultimaSpread ? 'BRL' : moedaBase;
     setText('resultCusto', formatCurrencyByMoeda(totais.custo, moedaTotais));
     setText('resultVenda', formatCurrencyByMoeda(totais.venda, moedaTotais));
     setText('resultMargem', formatCurrencyByMoeda(totais.margem, moedaTotais));

@@ -1166,6 +1166,8 @@ const fetchExchangeTicker = async () => {
     return tickerCache.data;
   }
 
+  const previous = tickerCache.data;
+
   try {
     const fetchBinancePrice = async (symbol) => {
       const controller = new AbortController();
@@ -1210,6 +1212,13 @@ const fetchExchangeTicker = async () => {
 
     if (!usdUsdt && Number.isFinite(USD_USDT_FALLBACK)) usdUsdt = USD_USDT_FALLBACK;
 
+    if (!Number.isFinite(usdtBrl)) {
+      usdtBrl = Number.isFinite(previous?.usdtBrl) ? previous.usdtBrl : null;
+    }
+    if (!Number.isFinite(usdtBrl)) {
+      throw new Error('USDT/BRL indisponível na Binance');
+    }
+
     const brlUsd = invert(usdBrl);
     const brlUsdt = invert(usdtBrl);
 
@@ -1219,8 +1228,8 @@ const fetchExchangeTicker = async () => {
       brlUsd,
       usdUsdt,
       brlUsdt,
-      btcBrl,
-      ethBrl,
+      btcBrl: Number.isFinite(btcBrl) ? btcBrl : (Number.isFinite(previous?.btcBrl) ? previous.btcBrl : null),
+      ethBrl: Number.isFinite(ethBrl) ? ethBrl : (Number.isFinite(previous?.ethBrl) ? previous.ethBrl : null),
       provider: usdtFastValue?.provider || 'Binance',
       updatedAt: new Date().toISOString()
     };
@@ -1230,6 +1239,10 @@ const fetchExchangeTicker = async () => {
     return data;
   } catch (error) {
     console.error('Erro ao compor ticker de câmbio', error);
+    if (previous) {
+      console.warn('Retornando cotação anterior por falha na atualização.');
+      return previous;
+    }
     throw error;
   }
 };
