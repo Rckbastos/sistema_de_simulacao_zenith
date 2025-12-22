@@ -48,7 +48,7 @@ const USDT_TICKER_CACHE_MS = Math.max(2000, Number(process.env.USDT_TICKER_CACHE
 const USDT_BRL_SPREAD_PCT = Math.max(0, Number(process.env.USDT_BRL_SPREAD_PCT ?? 0.003) || 0.003);
 const USDT_BRL_FALLBACK = Number.isFinite(Number(process.env.USDT_BRL_FALLBACK))
   ? Number(process.env.USDT_BRL_FALLBACK)
-  : null;
+  : 5.5; // fallback para evitar zero quando a Binance falhar
 const USD_USDT_FALLBACK = Number(process.env.USD_USDT_FALLBACK || 1);
 let tickerCache = { expires: 0, data: null };
 let usdtTickerCache = { expires: 0, value: null };
