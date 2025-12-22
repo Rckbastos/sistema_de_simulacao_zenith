@@ -72,12 +72,6 @@
     cotacaoItens: [],
     cotacaoMoeda: 'BRL',
     cotacaoUsdtBrl: null,
-    conversor: {
-      moeda: 'USDT',
-      valor: '',
-      spread: 0.003,
-      ultimoResultado: null
-    },
     invoiceItens: [],
     invoiceForm: null
   };
@@ -94,9 +88,11 @@
   const formatCurrency = value => currencyFormatter.format(Number(value) || 0);
   const formatCurrencyByMoeda = (value, moeda = 'BRL') => {
     const numero = Number(value) || 0;
-    return moeda === 'USD'
-      ? currencyFormatterUSD.format(numero)
-      : currencyFormatter.format(numero);
+    const m = (moeda || 'BRL').toString().trim().toUpperCase();
+    if (m === 'USD' || m === 'USDT') {
+      return `${m} ${currencyFormatterUSD.format(numero).replace('$', '').trim()}`;
+    }
+    return currencyFormatter.format(numero);
   };
   const normalizarMoedaLocal = (moeda = 'BRL') => {
     const normalized = (moeda || 'BRL').toString().trim().toUpperCase();
@@ -205,6 +201,7 @@
     maximumFractionDigits: 4
   });
   const TICKER_REFRESH_MS = 3000;
+  const USDT_SPREAD_PCT = 0.003; // 0.30% spread
   let tickerTimer = null;
   let cotacaoItemSeq = 0;
   const gerarItemId = () => `item-${Date.now()}-${cotacaoItemSeq++}`;
@@ -327,7 +324,6 @@
       } else {
         atualizarResumoCambio(false);
       }
-      atualizarConversorComTicker();
     } catch (error) {
       console.warn('Ticker indisponível', error);
     } finally {
@@ -2012,10 +2008,20 @@
     state.comercialEditando = null;
   };
 
-  const servicoUsdtPix = servico => {
-    if (!servico?.nome) return false;
-    const nome = servico.nome.toLowerCase();
-    return nome.includes('usdt') && nome.includes('pix');
+  const normalizarNomeServico = (servico) => {
+    if (!servico?.nome) return '';
+    return servico.nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  };
+
+  const servicoUsdtBras = servico => {
+    const nome = normalizarNomeServico(servico);
+    return nome.includes('usdt') && (nome.includes('bras') || nome.includes('brasil') || nome.includes('brás'));
+  };
+
+  const obterTaxaUsdtBrlComSpread = () => {
+    const base = Number(state.ticker?.usdtBrl);
+    if (!Number.isFinite(base)) return null;
+    return base * (1 + USDT_SPREAD_PCT);
   };
 
   const atualizarResumoCambio = alvo => {
@@ -2031,9 +2037,13 @@
 
     const deveExibir = typeof alvo === 'boolean'
       ? alvo
-      : (alvo ? servicoUsdtPix(alvo) : false);
-    const valor = Number(state.ticker?.usdtBrl);
-    const textoValor = Number.isFinite(valor) ? formatCurrency(valor) : '--';
+      : (alvo ? servicoUsdtBras(alvo) : false);
+    const valorBase = Number.isFinite(Number(state.cotacaoUsdtBrl))
+      ? Number(state.cotacaoUsdtBrl)
+      : Number(state.ticker?.usdtBrl);
+    const textoValor = Number.isFinite(valorBase)
+      ? `${formatCurrency(valorBase)}${Number.isFinite(Number(state.cotacaoUsdtBrl)) ? ' (c/ spread)' : ''}`
+      : '--';
 
     targets.forEach(target => {
       if (!target.wrapper || !target.value) return;
@@ -2047,88 +2057,6 @@
     });
   };
 
-  const limparConversorResultado = (mensagem) => {
-    setText('conversorRate', '--');
-    setText('conversorTotal', '--');
-    setText('conversorStatus', mensagem || 'Selecione USDT e informe o valor.');
-  };
-
-  const atualizarConversorUI = () => {
-    const select = el('conversorMoeda');
-    const suffix = el('conversorSuffix');
-    if (select) {
-      select.value = state.conversor.moeda || '';
-    }
-    if (suffix) {
-      suffix.textContent = state.conversor.moeda === 'USDT' ? 'USDT' : '---';
-    }
-  };
-
-  let conversorTimer = null;
-  const executarConversorUsdt = async () => {
-    const select = el('conversorMoeda');
-    if (select && select.value !== 'USDT') {
-      limparConversorResultado('Selecione USDT → BRL para converter.');
-      return;
-    }
-    const valor = toNumber(el('conversorValor')?.value);
-    state.conversor.valor = el('conversorValor')?.value || '';
-    if (!valor) {
-      limparConversorResultado('Informe um valor em USDT.');
-      return;
-    }
-    setText('conversorStatus', 'Calculando...');
-    setText('conversorTotal', '--');
-    try {
-      const data = await apiRequest(`/cambio/converter?amount=${encodeURIComponent(valor)}`);
-      state.conversor.spread = Number(data?.spreadPct ?? state.conversor.spread) || state.conversor.spread;
-      state.conversor.ultimoResultado = data;
-      const taxa = Number(data?.rateWithSpread);
-      setText('conversorRate', Number.isFinite(taxa)
-        ? `${formatCurrency(taxa)} (c/ spread ${Number(data.spreadPercent || (data.spreadPct * 100)).toFixed(2)}%)`
-        : '--');
-      setText('conversorTotal', formatCurrency(data?.totalBrl));
-      setText('conversorStatus', `Base ${formatCurrency(data?.baseRate)} | Atualizado ${new Date(data?.updatedAt || Date.now()).toLocaleTimeString()}`);
-    } catch (error) {
-      limparConversorResultado(error.message || 'Falha ao converter.');
-    }
-  };
-
-  const atualizarConversorComTicker = () => {
-    const select = el('conversorMoeda');
-    if (select && select.value !== 'USDT') return;
-    const valor = toNumber(el('conversorValor')?.value);
-    if (!valor || !Number.isFinite(Number(state.ticker?.usdtBrl))) return;
-    const spread = Number(state.conversor.spread) || 0.003;
-    const taxa = Number(state.ticker.usdtBrl) * (1 + spread);
-    setText('conversorRate', `${formatCurrency(taxa)} (c/ spread ${(spread * 100).toFixed(2)}%)`);
-    setText('conversorTotal', formatCurrency(valor * taxa));
-    setText('conversorStatus', `Base ${formatCurrency(state.ticker.usdtBrl)} | Atualizado ${new Date(state.ticker.updatedAt || Date.now()).toLocaleTimeString()}`);
-  };
-
-  const onConversorMoedaChange = () => {
-    const select = el('conversorMoeda');
-    state.conversor.moeda = select ? select.value : '';
-    atualizarConversorUI();
-    if (state.conversor.moeda === 'USDT') {
-      if (conversorTimer) window.clearTimeout(conversorTimer);
-      conversorTimer = window.setTimeout(executarConversorUsdt, 200);
-    } else {
-      limparConversorResultado();
-    }
-  };
-
-  const onConversorValorChange = () => {
-    if (state.conversor.moeda !== 'USDT') {
-      limparConversorResultado('Selecione USDT → BRL para converter.');
-      return;
-    }
-    if (conversorTimer) {
-      window.clearTimeout(conversorTimer);
-    }
-    conversorTimer = window.setTimeout(executarConversorUsdt, 300);
-  };
-
   const calcularCotacao = () => {
     if (temCotacaoMultiUI()) {
       calcularCotacaoMulti();
@@ -2137,14 +2065,15 @@
     const servicoId = el('cotacaoServico')?.value;
     const valorVenda = toNumber(el('valorVenda')?.value);
     const comissaoPercent = toNumber(el('comissao')?.value);
+    const moedaBase = normalizarMoedaLocal((el('cotacaoMoeda')?.value || state.cotacaoMoeda || 'BRL'));
     if (!servicoId) {
       setValue('custoDisplay', 'Selecione um serviço');
-      setText('resultCusto', formatCurrency(0));
-      setText('resultVenda', formatCurrency(valorVenda));
-      setText('resultMargem', formatCurrency(0));
-      setText('resultComissao', formatCurrency(0));
+      setText('resultCusto', formatCurrencyByMoeda(0, moedaBase));
+      setText('resultVenda', formatCurrencyByMoeda(valorVenda, moedaBase));
+      setText('resultMargem', formatCurrencyByMoeda(0, moedaBase));
+      setText('resultComissao', formatCurrencyByMoeda(0, moedaBase));
       setText('resultComissaoPercent', '0%');
-      setText('resultFinal', formatCurrency(valorVenda));
+      setText('resultFinal', formatCurrencyByMoeda(valorVenda, moedaBase));
       atualizarResumoCambio(null);
       return;
     }
@@ -2153,20 +2082,38 @@
     const custo = servico.tipoCusto === 'percentual'
       ? valorVenda * (servico.valor / 100)
       : servico.valor;
-    const margem = valorVenda - custo;
-    const comissao = valorVenda * (comissaoPercent / 100);
+    const deveConverterUsdt = servicoUsdtBras(servico) && moedaBase === 'USDT';
+    const taxaUsdtSpread = deveConverterUsdt ? obterTaxaUsdtBrlComSpread() : null;
+    if (deveConverterUsdt && !Number.isFinite(taxaUsdtSpread)) {
+      setText('resultCusto', '--');
+      setText('resultVenda', '--');
+      setText('resultMargem', '--');
+      setText('resultComissao', '--');
+      setText('resultComissaoPercent', `${comissaoPercent.toFixed(1)}%`);
+      setText('resultFinal', 'Cotação USDT/BRL indisponível');
+      state.cotacaoUsdtBrl = null;
+      atualizarResumoCambio(true);
+      return;
+    }
+
+    const fatorConversao = taxaUsdtSpread || 1;
+    const moedaDisplay = taxaUsdtSpread ? 'BRL' : moedaBase;
+    const custoCalc = custo * fatorConversao;
+    const vendaCalc = valorVenda * fatorConversao;
+    const margem = vendaCalc - custoCalc;
+    const comissao = vendaCalc * (comissaoPercent / 100);
     setValue('custoDisplay', servico.tipoCusto === 'percentual'
-      ? `${servico.valor}% de ${formatCurrency(valorVenda)} = ${formatCurrency(custo)}`
-      : formatCurrency(custo));
-    setText('resultCusto', formatCurrency(custo));
-    setText('resultVenda', formatCurrency(valorVenda));
-    setText('resultMargem', formatCurrency(margem));
+      ? `${servico.valor}% de ${formatCurrencyByMoeda(valorVenda, moedaBase)} = ${formatCurrencyByMoeda(custo, moedaBase)}`
+      : formatCurrencyByMoeda(custo, moedaBase));
+    setText('resultCusto', formatCurrencyByMoeda(custoCalc, moedaDisplay));
+    setText('resultVenda', formatCurrencyByMoeda(vendaCalc, moedaDisplay));
+    setText('resultMargem', formatCurrencyByMoeda(margem, moedaDisplay));
     setText('resultComissaoPercent', `${comissaoPercent.toFixed(1)}%`);
-    setText('resultComissao', formatCurrency(comissao));
-    setText('resultFinal', formatCurrency(valorVenda));
-    const deveExibirCambio = servicoUsdtPix(servico);
-    if (deveExibirCambio && Number.isFinite(Number(state.ticker?.usdtBrl))) {
-      state.cotacaoUsdtBrl = Number(state.ticker.usdtBrl);
+    setText('resultComissao', formatCurrencyByMoeda(comissao, moedaDisplay));
+    setText('resultFinal', formatCurrencyByMoeda(vendaCalc, moedaDisplay));
+    const deveExibirCambio = servicoUsdtBras(servico);
+    if (deveExibirCambio && Number.isFinite(Number(taxaUsdtSpread || state.ticker?.usdtBrl))) {
+      state.cotacaoUsdtBrl = taxaUsdtSpread || Number(state.ticker.usdtBrl);
     } else if (!deveExibirCambio) {
       state.cotacaoUsdtBrl = null;
     }
@@ -2177,8 +2124,8 @@
     const resumoList = el('resumoItensList');
     const comissaoPercent = toNumber(el('comissao')?.value);
     const moedaEl = el('cotacaoMoeda');
-    const moeda = moedaEl ? (moedaEl.value || 'BRL') : 'BRL';
-    state.cotacaoMoeda = moeda;
+    const moedaBase = normalizarMoedaLocal(moedaEl ? (moedaEl.value || 'BRL') : 'BRL');
+    state.cotacaoMoeda = moedaBase;
 
     const itensDetalhados = state.cotacaoItens
       .map(item => {
@@ -2192,49 +2139,86 @@
           uid: item.uid,
           servico,
           valorVenda,
-          custo,
-          margem: valorVenda - custo,
-          comissao: valorVenda * (comissaoPercent / 100)
+          custo
         };
       })
       .filter(Boolean);
 
+    const hasUsdtBras = itensDetalhados.some(item => servicoUsdtBras(item.servico));
+    const deveConverterUsdt = hasUsdtBras && moedaBase === 'USDT';
+    const taxaUsdtSpread = deveConverterUsdt ? obterTaxaUsdtBrlComSpread() : null;
+
+    if (deveConverterUsdt && !Number.isFinite(taxaUsdtSpread)) {
+      setText('resultCusto', '--');
+      setText('resultVenda', '--');
+      setText('resultMargem', '--');
+      setText('resultComissaoPercent', `${comissaoPercent.toFixed(1)}%`);
+      setText('resultComissao', '--');
+      setText('resultFinal', 'Cotação USDT/BRL indisponível');
+      state.cotacaoUsdtBrl = null;
+      atualizarResumoCambio(true);
+      return;
+    }
+
+    const itensConvertidos = itensDetalhados.map(item => {
+      const isUsdtBras = servicoUsdtBras(item.servico);
+      if (deveConverterUsdt && isUsdtBras && taxaUsdtSpread) {
+        const valorBrl = item.valorVenda * taxaUsdtSpread;
+        const custoBrl = item.custo * taxaUsdtSpread;
+        return {
+          ...item,
+          valorDisplay: valorBrl,
+          custoDisplay: custoBrl,
+          margemDisplay: valorBrl - custoBrl,
+          moedaDisplay: 'BRL'
+        };
+      }
+      return {
+        ...item,
+        valorDisplay: item.valorVenda,
+        custoDisplay: item.custo,
+        margemDisplay: item.valorVenda - item.custo,
+        moedaDisplay: moedaBase
+      };
+    });
+
     if (resumoList) {
-      if (itensDetalhados.length === 0) {
+      if (itensConvertidos.length === 0) {
         resumoList.innerHTML = '<li class="resumo-item">Adicione ao menos um serviço para visualizar o resumo.</li>';
       } else {
-        resumoList.innerHTML = itensDetalhados.map((item, index) => `
+        resumoList.innerHTML = itensConvertidos.map((item, index) => `
           <li class="resumo-item">
             <div class="resumo-item__titulo">
               <span>${index + 1}. ${escapeHtml(item.servico.nome)}</span>
-              <span>${formatCurrencyByMoeda(item.valorVenda, moeda)}</span>
+              <span>${formatCurrencyByMoeda(item.valorDisplay, item.moedaDisplay)}</span>
             </div>
             <div class="resumo-item__detalhes">
-              <span>Custo: ${formatCurrencyByMoeda(item.custo, moeda)}</span>
-              <span>Margem: ${formatCurrencyByMoeda(item.margem, moeda)}</span>
+              <span>Custo: ${formatCurrencyByMoeda(item.custoDisplay, item.moedaDisplay)}</span>
+              <span>Margem: ${formatCurrencyByMoeda(item.margemDisplay, item.moedaDisplay)}</span>
             </div>
           </li>
         `).join('');
       }
     }
 
-    const totais = itensDetalhados.reduce((acc, item) => ({
-      custo: acc.custo + item.custo,
-      venda: acc.venda + item.valorVenda,
-      margem: acc.margem + item.margem
+    const totais = itensConvertidos.reduce((acc, item) => ({
+      custo: acc.custo + item.custoDisplay,
+      venda: acc.venda + item.valorDisplay,
+      margem: acc.margem + item.margemDisplay
     }), { custo: 0, venda: 0, margem: 0 });
 
     const comissaoTotal = totais.venda * (comissaoPercent / 100);
-    setText('resultCusto', formatCurrencyByMoeda(totais.custo, moeda));
-    setText('resultVenda', formatCurrencyByMoeda(totais.venda, moeda));
-    setText('resultMargem', formatCurrencyByMoeda(totais.margem, moeda));
+    const moedaTotais = taxaUsdtSpread ? 'BRL' : moedaBase;
+    setText('resultCusto', formatCurrencyByMoeda(totais.custo, moedaTotais));
+    setText('resultVenda', formatCurrencyByMoeda(totais.venda, moedaTotais));
+    setText('resultMargem', formatCurrencyByMoeda(totais.margem, moedaTotais));
     setText('resultComissaoPercent', `${comissaoPercent.toFixed(1)}%`);
-    setText('resultComissao', formatCurrencyByMoeda(comissaoTotal, moeda));
-    setText('resultFinal', formatCurrencyByMoeda(totais.venda, moeda));
+    setText('resultComissao', formatCurrencyByMoeda(comissaoTotal, moedaTotais));
+    setText('resultFinal', formatCurrencyByMoeda(totais.venda, moedaTotais));
 
-    const deveExibirCambio = itensDetalhados.some(item => servicoUsdtPix(item.servico));
-    if (deveExibirCambio && Number.isFinite(Number(state.ticker?.usdtBrl))) {
-      state.cotacaoUsdtBrl = Number(state.ticker.usdtBrl);
+    const deveExibirCambio = itensConvertidos.some(item => servicoUsdtBras(item.servico));
+    if (deveExibirCambio && Number.isFinite(Number(taxaUsdtSpread || state.ticker?.usdtBrl))) {
+      state.cotacaoUsdtBrl = taxaUsdtSpread || Number(state.ticker.usdtBrl);
     } else if (!deveExibirCambio) {
       state.cotacaoUsdtBrl = null;
     }
@@ -2421,8 +2405,6 @@
     removerItemCotacao,
     atualizarItemCotacaoCampo,
     calcularCotacao,
-    onConversorMoedaChange,
-    onConversorValorChange,
     salvarCotacao,
     limparFormCotacao,
     mudarStatusCotacao,
@@ -2459,7 +2441,5 @@
   calcularInvoiceResumo();
   setInvoiceStatus('');
   restaurarSessao();
-  atualizarConversorUI();
-  limparConversorResultado();
   iniciarAtualizacaoTicker();
 })();

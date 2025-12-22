@@ -862,39 +862,6 @@
             text-align: right;
         }
 
-        .conversor-card {
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 16px;
-            background: var(--bg-card);
-            margin-top: 16px;
-        }
-
-        .conversor-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-
-        .conversor-title {
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-
-        .conversor-subtitle {
-            color: var(--text-secondary);
-            font-size: 12px;
-        }
-
-        .conversor-pill {
-            padding: 4px 10px;
-            border-radius: 999px;
-            background: rgba(212, 175, 55, 0.12);
-            color: var(--accent-gold);
-            font-weight: 700;
-            font-size: 12px;
-        }
 
         .servico-pill {
             display: inline-flex;
@@ -1079,6 +1046,7 @@
                             <select class="form-select" id="cotacaoMoeda" onchange="calcularCotacao()">
                                 <option value="BRL">Real (BRL)</option>
                                 <option value="USD">Dólar (USD)</option>
+                                <option value="USDT">Tether (USDT)</option>
                             </select>
                         </div>
                         
@@ -1135,38 +1103,6 @@
                         <div style="padding: 20px 0; border-top: 2px solid var(--accent-gold); margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
                             <span style="font-size: 18px; font-weight: 600; color: var(--accent-gold);">Valor para o Cliente:</span>
                             <span style="font-size: 32px; font-weight: 700; color: var(--accent-gold);" id="resultFinal">R$ 0,00</span>
-                        </div>
-
-                        <div class="conversor-card">
-                            <div class="conversor-header">
-                                <div>
-                                    <div class="conversor-title">🔄 Conversor USDT → BRL</div>
-                                    <div class="conversor-subtitle">Aplica spread de 0,30%.</div>
-                                </div>
-                                <span class="conversor-pill">Câmbio</span>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Moeda</label>
-                                <select class="form-select" id="conversorMoeda" onchange="onConversorMoedaChange()">
-                                    <option value="">Selecione...</option>
-                                    <option value="USDT" selected>USDT → BRL</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Valor em USDT</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-input input-with-suffix" id="conversorValor" placeholder="Ex: 10000" min="0" step="0.01" oninput="onConversorValorChange()">
-                                    <span class="input-suffix" id="conversorSuffix">USDT</span>
-                                </div>
-                            </div>
-                            <div class="resumo-item" style="margin-top: 10px;">
-                                <div class="resumo-item-info">
-                                    <span class="resumo-item-title">Taxa com spread</span>
-                                    <span class="resumo-item-subtitle" id="conversorRate">--</span>
-                                </div>
-                                <div class="resumo-item-value" id="conversorTotal">--</div>
-                            </div>
-                            <div class="resumo-item-subtitle" id="conversorStatus" style="margin-top: 6px; color: var(--text-secondary);"></div>
                         </div>
                         
                         <div class="btn-group">
