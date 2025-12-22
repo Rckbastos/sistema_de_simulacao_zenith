@@ -357,11 +357,38 @@
       if (!response.ok) {
         throw new Error('Não foi possível consultar as cotações.');
       }
-    const data = await response.json();
-    state.ticker = data;
-    state.tickerUpdatedAt = Date.now();
+      const data = await response.json();
+
+      const toNumber = value => {
+        const n = Number(value);
+        return Number.isFinite(n) && n > 0 ? n : null;
+      };
+
+      const raw = (data && typeof data === 'object' && (data.raw || data.cryptoCompare || data.data)) || null;
+      const hasRawUsdt = raw?.USDT && raw.USDT.BRL !== undefined;
+      const hasRawBtc = raw?.BTC && raw.BTC.BRL !== undefined;
+      const hasRawEth = raw?.ETH && raw.ETH.BRL !== undefined;
+
+      const usdtBrl = toNumber(data?.usdtBrl) ?? (hasRawUsdt ? toNumber(raw.USDT.BRL) : null);
+      const btcBrl = toNumber(data?.btcBrl) ?? (hasRawBtc ? toNumber(raw.BTC.BRL) : null);
+      const ethBrl = toNumber(data?.ethBrl) ?? (hasRawEth ? toNumber(raw.ETH.BRL) : null);
+
+      const nextTicker = {
+        ...state.ticker,
+        ...data,
+        usdtBrl: Number.isFinite(usdtBrl) ? usdtBrl : toNumber(state.ticker?.usdtBrl),
+        btcBrl: Number.isFinite(btcBrl) ? btcBrl : toNumber(state.ticker?.btcBrl),
+        ethBrl: Number.isFinite(ethBrl) ? ethBrl : toNumber(state.ticker?.ethBrl),
+        raw: raw || state.ticker?.raw || null
+      };
+
+      if (!Number.isFinite(nextTicker.usdtBrl)) {
+        throw new Error('Ticker USDT/BRL indisponível.');
+      }
+
+      state.ticker = nextTicker;
       state.tickerUpdatedAt = Date.now();
-      renderTicker(data);
+      renderTicker(state.ticker);
       if (temCotacaoMultiUI() || el('cotacaoServico')) {
         calcularCotacao();
       } else {

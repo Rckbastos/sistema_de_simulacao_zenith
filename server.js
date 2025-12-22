@@ -37,18 +37,18 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 const FX_CACHE_MS = Math.max(5000, Number(process.env.RATE_CACHE_MS || 5000) || 5000);
-const FX_TIMEOUT_MS = Math.max(5000, Number(process.env.RATE_TIMEOUT_MS || 8000));
+// Tempo maior (10s) para evitar quebra quando a API demora a responder
+const FX_TIMEOUT_MS = Math.max(10000, Number(process.env.RATE_TIMEOUT_MS || 10000) || 10000);
 const FX_HEADERS = {
   'User-Agent': 'SistemaSimulacaoZenith/1.0 (+railway.app)',
   Accept: 'application/json'
 };
-const USDT_TICKER_URL = process.env.USDT_TICKER_URL?.trim()
-  || 'https://api.binance.com/api/v3/ticker/price?symbol=USDTBRL';
 const USDT_TICKER_CACHE_MS = Math.max(2000, Number(process.env.USDT_TICKER_CACHE_MS || 3000) || 3000);
 const USDT_BRL_SPREAD_PCT = Math.max(0, Number(process.env.USDT_BRL_SPREAD_PCT ?? 0.003) || 0.003);
 const USDT_BRL_FALLBACK = Number.isFinite(Number(process.env.USDT_BRL_FALLBACK))
   ? Number(process.env.USDT_BRL_FALLBACK)
-  : 5.5; // fallback para evitar zero quando a Binance falhar
+  : null;
+const CRYPTOCOMPARE_API_KEY = process.env.CRYPTOCOMPARE_API_KEY?.trim();
 const USD_USDT_FALLBACK = Number(process.env.USD_USDT_FALLBACK || 1);
 let tickerCache = { expires: 0, data: null };
 let usdtTickerCache = { expires: 0, value: null };
@@ -1144,79 +1144,57 @@ const fetchExchangeTicker = async () => {
   const previous = tickerCache.data;
 
   try {
-    const fetchPrice = async (symbol) => {
-      const fetchWithTimeout = async (url) => {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), FX_TIMEOUT_MS);
-        try {
-          const response = await fetchFn(url, { headers: FX_HEADERS, signal: controller.signal });
-          if (!response.ok) {
-            const body = await response.text().catch(() => '');
-            throw new Error(`${url} respondeu ${response.status}: ${body?.slice(0, 120)}`);
-          }
-          return response;
-        } finally {
-          clearTimeout(timeout);
+    const toNumber = value => (Number.isFinite(Number(value)) ? Number(value) : null);
+
+    const fetchWithTimeout = async (url, headers = {}) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), FX_TIMEOUT_MS);
+      try {
+        const response = await fetchFn(url, { headers, signal: controller.signal });
+        if (!response.ok) {
+          const body = await response.text().catch(() => '');
+          throw new Error(`${url} respondeu ${response.status}: ${body?.slice(0, 120)}`);
         }
-      };
-
-      // 1) Binance spot
-      try {
-        const res = await fetchWithTimeout(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
-        const payload = await res.json();
-        const price = Number(payload?.price || payload?.lastPrice || payload?.last || payload?.value);
-        if (Number.isFinite(price)) return price;
-      } catch (err) {
-        console.warn(`Binance falhou para ${symbol}`, err.message || err);
+        return response;
+      } finally {
+        clearTimeout(timeout);
       }
-
-      // 2) OKX
-      try {
-        const okxSymbol = symbol.replace('BRL', '-BRL'); // ex: USDTBRL -> USDT-BRL
-        const res = await fetchWithTimeout(`https://www.okx.com/api/v5/market/ticker?instId=${okxSymbol}`);
-        const payload = await res.json();
-        const price = Number(payload?.data?.[0]?.last);
-        if (Number.isFinite(price)) return price;
-      } catch (err) {
-        console.warn(`OKX falhou para ${symbol}`, err.message || err);
-      }
-
-      // 3) Bybit spot
-      try {
-        const res = await fetchWithTimeout(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${symbol}`);
-        const payload = await res.json();
-        const price = Number(payload?.result?.list?.[0]?.lastPrice);
-        if (Number.isFinite(price)) return price;
-      } catch (err) {
-        console.warn(`Bybit falhou para ${symbol}`, err.message || err);
-      }
-
-      throw new Error(`Nenhuma fonte retornou preço para ${symbol}`);
     };
 
-    const [usdtPrice, btcPrice, ethPrice] = await Promise.allSettled([
-      fetchPrice('USDTBRL'),
-      fetchPrice('BTCBRL'),
-      fetchPrice('ETHBRL')
-    ]);
+    const fetchCryptoCompare = async () => {
+      const url = 'https://min-api.cryptocompare.com/data/pricemulti?fsyms=USDT,BTC,ETH&tsyms=BRL&e=Binance';
+      const headers = { ...FX_HEADERS };
+      if (CRYPTOCOMPARE_API_KEY) {
+        headers.Authorization = `Apikey ${CRYPTOCOMPARE_API_KEY}`;
+      }
+      const res = await fetchWithTimeout(url, headers);
+      const payload = await res.json();
+      if (!payload || typeof payload !== 'object') {
+        throw new Error('Resposta inválida da CryptoCompare');
+      }
+      return payload;
+    };
 
-    if (usdtPrice.status === 'rejected') {
-      console.warn('USDT/BRL indisponível', usdtPrice.reason);
+    let prices = null;
+    try {
+      prices = await fetchCryptoCompare();
+    } catch (err) {
+      console.error('CryptoCompare falhou', err.message || err);
     }
 
-    const usdtBrlDirect = usdtPrice.status === 'fulfilled' ? usdtPrice.value : null;
-    const btcBrl = btcPrice.status === 'fulfilled' ? btcPrice.value : null;
-    const ethBrl = ethPrice.status === 'fulfilled' ? ethPrice.value : null;
+    const rawUsdtBrl = toNumber(prices?.USDT?.BRL);
+    const rawBtcBrl = toNumber(prices?.BTC?.BRL);
+    const rawEthBrl = toNumber(prices?.ETH?.BRL);
 
     let usdBrl = null;
     let usdUsdt = null;
-    let usdtBrl = usdtBrlDirect ?? null;
+    let usdtBrl = rawUsdtBrl ?? null;
 
     if (!usdUsdt && Number.isFinite(USD_USDT_FALLBACK)) usdUsdt = USD_USDT_FALLBACK;
 
     if (!Number.isFinite(usdtBrl)) usdtBrl = Number.isFinite(previous?.usdtBrl) ? previous.usdtBrl : null;
     if (!Number.isFinite(usdtBrl) && Number.isFinite(USDT_BRL_FALLBACK)) usdtBrl = USDT_BRL_FALLBACK;
-    if (!Number.isFinite(usdtBrl)) throw new Error('USDT/BRL indisponível na Binance');
+    if (!Number.isFinite(usdtBrl)) throw new Error('USDT/BRL indisponível nas fontes configuradas');
 
     const brlUsd = invert(usdBrl);
     const brlUsdt = invert(usdtBrl);
@@ -1227,11 +1205,20 @@ const fetchExchangeTicker = async () => {
       brlUsd,
       usdUsdt,
       brlUsdt,
-      btcBrl: Number.isFinite(btcBrl) ? btcBrl : (Number.isFinite(previous?.btcBrl) ? previous.btcBrl : null),
-      ethBrl: Number.isFinite(ethBrl) ? ethBrl : (Number.isFinite(previous?.ethBrl) ? previous.ethBrl : null),
-      provider: 'Binance',
-      updatedAt: new Date().toISOString()
+      btcBrl: Number.isFinite(rawBtcBrl) ? rawBtcBrl : (Number.isFinite(previous?.btcBrl) ? previous.btcBrl : null),
+      ethBrl: Number.isFinite(rawEthBrl) ? rawEthBrl : (Number.isFinite(previous?.ethBrl) ? previous.ethBrl : null),
+      provider: 'CryptoCompare (Binance)',
+      updatedAt: new Date().toISOString(),
+      raw: prices || null
     };
+
+    if (!Number.isFinite(data.usdtBrl)) {
+      if (previous) {
+        console.warn('Ticker USDT/BRL indisponível, retornando cache anterior.');
+        return previous;
+      }
+      throw new Error('USDT/BRL indisponível nas fontes configuradas');
+    }
 
     const nextCacheMs = Math.min(USDT_TICKER_CACHE_MS, FX_CACHE_MS);
     tickerCache = { data, expires: now + nextCacheMs };
@@ -1242,18 +1229,7 @@ const fetchExchangeTicker = async () => {
       console.warn('Retornando cotação anterior por falha na atualização.');
       return previous;
     }
-    // Como último recurso, retorna fallback básico para não derrubar o front
-    return {
-      usdBrl: null,
-      usdtBrl: Number.isFinite(USDT_BRL_FALLBACK) ? USDT_BRL_FALLBACK : null,
-      brlUsd: invert(null),
-      usdUsdt: Number.isFinite(USD_USDT_FALLBACK) ? USD_USDT_FALLBACK : null,
-      brlUsdt: null,
-      btcBrl: null,
-      ethBrl: null,
-      provider: 'fallback',
-      updatedAt: new Date().toISOString()
-    };
+    throw error;
   }
 };
 
