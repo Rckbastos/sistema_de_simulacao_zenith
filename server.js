@@ -36,7 +36,7 @@ const pool = new Pool(poolConfig);
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-const FX_CACHE_MS = Math.max(30000, Number(process.env.RATE_CACHE_MS || 60000));
+const FX_CACHE_MS = Math.max(5000, Number(process.env.RATE_CACHE_MS || 5000) || 5000);
 const FX_TIMEOUT_MS = Math.max(5000, Number(process.env.RATE_TIMEOUT_MS || 8000));
 const EXCHANGE_RATE_API_KEY = process.env.EXCHANGE_RATE_API_KEY?.trim();
 const EXCHANGE_RATE_BASE = 'USD';

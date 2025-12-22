@@ -198,7 +198,7 @@
     minimumFractionDigits: 4,
     maximumFractionDigits: 4
   });
-  const TICKER_REFRESH_MS = 60000;
+  const TICKER_REFRESH_MS = 5000;
   let tickerTimer = null;
   let cotacaoItemSeq = 0;
   const gerarItemId = () => `item-${Date.now()}-${cotacaoItemSeq++}`;
