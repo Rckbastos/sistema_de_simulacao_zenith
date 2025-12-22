@@ -1132,34 +1132,6 @@ const normalizarMoeda = value => {
   return allowed.includes(normalized) ? normalized : 'BRL';
 };
 
-const fetchUsdtBrlFast = async () => {
-  const now = Date.now();
-  if (usdtTickerCache.value && usdtTickerCache.expires > now) {
-    return usdtTickerCache.value;
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FX_TIMEOUT_MS);
-
-  try {
-    const response = await fetchFn(USDT_TICKER_URL, { headers: FX_HEADERS, signal: controller.signal });
-    if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(`USDT/BRL indisponível (${response.status}): ${body?.slice(0, 120)}`);
-    }
-    const payload = await response.json();
-    const price = Number(payload?.price || payload?.lastPrice || payload?.last || payload?.value);
-    if (!Number.isFinite(price)) {
-      throw new Error('USDT/BRL inválido na resposta da fonte rápida');
-    }
-    const value = { usdtBrl: price, provider: 'Binance' };
-    usdtTickerCache = { value, expires: now + USDT_TICKER_CACHE_MS };
-    return value;
-  } finally {
-    clearTimeout(timeout);
-  }
-};
-
 const fetchExchangeTicker = async () => {
   const now = Date.now();
   if (tickerCache.data && tickerCache.expires > now) {
@@ -1192,23 +1164,23 @@ const fetchExchangeTicker = async () => {
       }
     };
 
-    const [usdtFast, btcPrice, ethPrice] = await Promise.allSettled([
-      fetchUsdtBrlFast(),
+    const [usdtPrice, btcPrice, ethPrice] = await Promise.allSettled([
+      fetchBinancePrice('USDTBRL'),
       fetchBinancePrice('BTCBRL'),
       fetchBinancePrice('ETHBRL')
     ]);
 
-    if (usdtFast.status === 'rejected') {
-      console.warn('USDT/BRL rápido indisponível', usdtFast.reason);
+    if (usdtPrice.status === 'rejected') {
+      console.warn('USDT/BRL indisponível', usdtPrice.reason);
     }
 
-    const usdtFastValue = usdtFast.status === 'fulfilled' ? usdtFast.value : null;
+    const usdtBrlDirect = usdtPrice.status === 'fulfilled' ? usdtPrice.value : null;
     const btcBrl = btcPrice.status === 'fulfilled' ? btcPrice.value : null;
     const ethBrl = ethPrice.status === 'fulfilled' ? ethPrice.value : null;
 
     let usdBrl = null;
     let usdUsdt = null;
-    let usdtBrl = usdtFastValue?.usdtBrl ?? null;
+    let usdtBrl = usdtBrlDirect ?? null;
 
     if (!usdUsdt && Number.isFinite(USD_USDT_FALLBACK)) usdUsdt = USD_USDT_FALLBACK;
 
@@ -1230,7 +1202,7 @@ const fetchExchangeTicker = async () => {
       brlUsdt,
       btcBrl: Number.isFinite(btcBrl) ? btcBrl : (Number.isFinite(previous?.btcBrl) ? previous.btcBrl : null),
       ethBrl: Number.isFinite(ethBrl) ? ethBrl : (Number.isFinite(previous?.ethBrl) ? previous.ethBrl : null),
-      provider: usdtFastValue?.provider || 'Binance',
+      provider: 'Binance',
       updatedAt: new Date().toISOString()
     };
 
