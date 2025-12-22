@@ -2172,8 +2172,9 @@
     const custo = servico.tipoCusto === 'percentual'
       ? valorVenda * (servico.valor / 100)
       : servico.valor;
-    const deveConverterUsdt = servicoUsdtBras(servico) && moedaBase === 'USDT';
-    const taxaUsdtSpread = deveConverterUsdt ? obterTaxaUsdtBrlComSpread(spreadPctServico) : null;
+    const isUsdtBras = servicoUsdtBras(servico);
+    const deveConverterUsdt = isUsdtBras && moedaBase === 'USDT';
+    const taxaUsdtSpread = isUsdtBras ? obterTaxaUsdtBrlComSpread(spreadPctServico) : null;
     if (deveConverterUsdt && !Number.isFinite(taxaUsdtSpread)) {
       setText('resultCusto', '--');
       setText('resultVenda', '--');
@@ -2206,7 +2207,7 @@
     setText('resultComissaoPercent', `${comissaoPercent.toFixed(1)}%`);
     setText('resultComissao', formatCurrencyByMoeda(comissao, moedaDisplay));
     setText('resultFinal', formatCurrencyByMoeda(vendaCalc, moedaDisplay));
-    const deveExibirCambio = servicoUsdtBras(servico);
+    const deveExibirCambio = isUsdtBras;
     if (deveExibirCambio && Number.isFinite(Number(taxaUsdtSpread || state.ticker?.usdtBrl))) {
       state.cotacaoUsdtBase = Number(state.ticker?.usdtBrl) || null;
       state.cotacaoUsdtBrl = taxaUsdtSpread || Number(state.ticker.usdtBrl);
@@ -2263,20 +2264,22 @@
 
     const itensConvertidos = itensDetalhados.map(item => {
       const isUsdtBras = servicoUsdtBras(item.servico);
-      if (deveConverterUsdt && isUsdtBras && Number.isFinite(baseUsdt)) {
+      if (isUsdtBras && Number.isFinite(baseUsdt)) {
         const spreadPct = item.servico.tipoCusto === 'percentual'
           ? Number(item.servico.valor || 0) / 100
           : USDT_SPREAD_PCT;
         const taxa = baseUsdt * (1 + spreadPct);
         ultimaSpread = taxa;
-        const valorConvertido = item.valorVenda * taxa;
-        return {
-          ...item,
-          valorDisplay: valorConvertido,
-          custoDisplay: valorConvertido,
-          margemDisplay: 0,
-          moedaDisplay: 'BRL'
-        };
+        if (deveConverterUsdt) {
+          const valorConvertido = item.valorVenda * taxa;
+          return {
+            ...item,
+            valorDisplay: valorConvertido,
+            custoDisplay: valorConvertido,
+            margemDisplay: 0,
+            moedaDisplay: 'BRL'
+          };
+        }
       }
       return {
         ...item,
