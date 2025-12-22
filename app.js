@@ -72,6 +72,7 @@
     kycRegistros: [],
     cotacaoItens: [],
     cotacaoMoeda: 'BRL',
+    cotacaoUsdtBase: null,
     cotacaoUsdtBrl: null,
     invoiceItens: [],
     invoiceForm: null
@@ -94,6 +95,11 @@
       return `${m} ${currencyFormatterUSD.format(numero).replace('$', '').trim()}`;
     }
     return currencyFormatter.format(numero);
+  };
+  const formatFxRate = (value) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '--';
+    return num.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
   };
   const normalizarMoedaLocal = (moeda = 'BRL') => {
     const normalized = (moeda || 'BRL').toString().trim().toUpperCase();
@@ -201,7 +207,7 @@
     minimumFractionDigits: 4,
     maximumFractionDigits: 4
   });
-  const TICKER_REFRESH_MS = 3000;
+  const TICKER_REFRESH_MS = 5000;
   const USDT_SPREAD_PCT = 0.003; // 0.30% spread
   let tickerTimer = null;
   let tickerStatusTimer = null;
@@ -2069,8 +2075,14 @@
     const valorBase = Number.isFinite(Number(state.cotacaoUsdtBrl))
       ? Number(state.cotacaoUsdtBrl)
       : Number(state.ticker?.usdtBrl);
-    const textoValor = Number.isFinite(valorBase)
-      ? `${formatCurrency(valorBase)}${Number.isFinite(Number(state.cotacaoUsdtBrl)) ? ' (c/ spread)' : ''}`
+    const baseRate = Number.isFinite(Number(state.cotacaoUsdtBase))
+      ? Number(state.cotacaoUsdtBase)
+      : Number(state.ticker?.usdtBrl);
+    const spreadRate = Number.isFinite(Number(state.cotacaoUsdtBrl))
+      ? Number(state.cotacaoUsdtBrl)
+      : (Number.isFinite(baseRate) ? baseRate * (1 + USDT_SPREAD_PCT) : null);
+    const textoValor = Number.isFinite(baseRate)
+      ? `Base: R$ ${formatFxRate(baseRate)} | c/ spread: R$ ${formatFxRate(spreadRate)}`
       : '--';
 
     targets.forEach(target => {
@@ -2119,6 +2131,7 @@
       setText('resultComissao', '--');
       setText('resultComissaoPercent', `${comissaoPercent.toFixed(1)}%`);
       setText('resultFinal', 'Cotação USDT/BRL indisponível');
+      state.cotacaoUsdtBase = null;
       state.cotacaoUsdtBrl = null;
       atualizarResumoCambio(true);
       return;
@@ -2141,8 +2154,10 @@
     setText('resultFinal', formatCurrencyByMoeda(vendaCalc, moedaDisplay));
     const deveExibirCambio = servicoUsdtBras(servico);
     if (deveExibirCambio && Number.isFinite(Number(taxaUsdtSpread || state.ticker?.usdtBrl))) {
+      state.cotacaoUsdtBase = Number(state.ticker?.usdtBrl) || null;
       state.cotacaoUsdtBrl = taxaUsdtSpread || Number(state.ticker.usdtBrl);
     } else if (!deveExibirCambio) {
+      state.cotacaoUsdtBase = null;
       state.cotacaoUsdtBrl = null;
     }
     atualizarResumoCambio(deveExibirCambio);
@@ -2183,6 +2198,7 @@
       setText('resultComissaoPercent', `${comissaoPercent.toFixed(1)}%`);
       setText('resultComissao', '--');
       setText('resultFinal', 'Cotação USDT/BRL indisponível');
+      state.cotacaoUsdtBase = null;
       state.cotacaoUsdtBrl = null;
       atualizarResumoCambio(true);
       return;
@@ -2246,8 +2262,10 @@
 
     const deveExibirCambio = itensConvertidos.some(item => servicoUsdtBras(item.servico));
     if (deveExibirCambio && Number.isFinite(Number(taxaUsdtSpread || state.ticker?.usdtBrl))) {
+      state.cotacaoUsdtBase = Number(state.ticker?.usdtBrl) || null;
       state.cotacaoUsdtBrl = taxaUsdtSpread || Number(state.ticker.usdtBrl);
     } else if (!deveExibirCambio) {
+      state.cotacaoUsdtBase = null;
       state.cotacaoUsdtBrl = null;
     }
     atualizarResumoCambio(deveExibirCambio);
