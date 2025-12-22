@@ -65,6 +65,7 @@
     comerciais: [],
     cotacoes: [],
     ticker: null,
+    tickerUpdatedAt: null,
     servicoEditando: null,
     clienteEditando: null,
     comercialEditando: null,
@@ -203,6 +204,7 @@
   const TICKER_REFRESH_MS = 3000;
   const USDT_SPREAD_PCT = 0.003; // 0.30% spread
   let tickerTimer = null;
+  let tickerStatusTimer = null;
   let cotacaoItemSeq = 0;
   const gerarItemId = () => `item-${Date.now()}-${cotacaoItemSeq++}`;
   const novoItemCotacao = (overrides = {}) => ({
@@ -303,6 +305,26 @@
     track.innerHTML = content ? `${content}${content}` : '<span class="ticker-item">Cotações indisponíveis</span>';
   };
 
+  const atualizarBarraTicker = () => {
+    const bar = el('tickerRefreshBar');
+    const label = el('tickerRefreshLabel');
+    if (!bar || !label) return;
+    const interval = TICKER_REFRESH_MS;
+    const last = state.tickerUpdatedAt
+      || (state.ticker?.updatedAt ? Date.parse(state.ticker.updatedAt) : null);
+    if (!last || Number.isNaN(last)) {
+      bar.style.width = '0%';
+      label.textContent = 'Aguardando cotação...';
+      return;
+    }
+    const now = Date.now();
+    const elapsed = now - last;
+    const remaining = Math.max(0, interval - (elapsed % interval));
+    const percent = Math.max(0, Math.min(100, (remaining / interval) * 100));
+    bar.style.width = `${percent}%`;
+    label.textContent = `Atualiza em ${(remaining / 1000).toFixed(1)}s`;
+  };
+
   const scheduleTickerRefresh = () => {
     if (tickerTimer) {
       window.clearTimeout(tickerTimer);
@@ -318,12 +340,14 @@
       }
       const data = await response.json();
       state.ticker = data;
+      state.tickerUpdatedAt = Date.now();
       renderTicker(data);
       if (temCotacaoMultiUI() || el('cotacaoServico')) {
         calcularCotacao();
       } else {
         atualizarResumoCambio(false);
       }
+      atualizarBarraTicker();
     } catch (error) {
       console.warn('Ticker indisponível', error);
     } finally {
@@ -335,6 +359,10 @@
     if (tickerTimer) {
       window.clearTimeout(tickerTimer);
     }
+    if (tickerStatusTimer) {
+      window.clearInterval(tickerStatusTimer);
+    }
+    tickerStatusTimer = window.setInterval(atualizarBarraTicker, 200);
     fetchTicker();
   };
 
