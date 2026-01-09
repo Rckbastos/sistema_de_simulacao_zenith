@@ -72,17 +72,17 @@ const DEFAULT_PERMISSIONS = {
 };
 
 const INVOICE_DEFAULTS = {
-  companyName: 'ZENITH PAY',
-  addressLine1: 'C. N PAGAMENTOS ONLINE LTDA',
-  addressLine2: 'R. WASHINGTON LUIS, 59, LOTE 10B, QUADRA 43, CXPST 20 - CENTRO, NOSSA SENHORA DAS GRÇAS – PR – CEP: 86.680-000 – BRASIL',
+  companyName: 'Prismapay Instituicao de Pagamento Ltda',
+  addressLine1: 'Rua Visconde de Inhauma, 134, Sal 2001 a 2024 - Rio de Janeiro - Brazil.',
+  addressLine2: 'ZIP Code: 20.091-901',
   phone: 'Tel: [Telefone]',
   fax: 'Fax: [Fax]',
   email: 'Email: [Email]',
   website: 'Web: www.zenithpay.com',
-  taxId: 'CNPJ/Tax ID: 53.213.723/0001-35',
+  taxId: 'CNPJ/Tax ID: 61.338.266/0001-33',
   romalpaClause:
     process.env.INVOICE_ROMALPA_CLAUSE
-    || 'Goods sold and delivered remain the property of Zenith Pay until full payment is received.',
+    || 'Goods sold and delivered remain the property of Prismapay Instituicao de Pagamento Ltda until full payment is received.',
   terms: (process.env.INVOICE_TERMS || 'Goods sold are not returnable unless defective.|Payment must be received before shipment for prepayment terms.|Any disputes shall be governed by the laws of [Jurisdiction].|Buyer is responsible for all import duties, taxes, and customs clearance fees.').split('|')
 };
 
@@ -259,7 +259,7 @@ const getInvoiceText = (lang = 'pt') => {
       left1: isEn ? 'Goods received in good condition' : 'Mercadorias recebidas em boas condições',
       left2: isEn ? 'Goods sold are not returnable' : 'Mercadorias vendidas não são retornáveis',
       right1: isEn ? 'On behalf of' : 'Em Nome de',
-      right2: 'Zenith Pay',
+      right2: INVOICE_DEFAULTS.companyName,
       stampLeft: isEn ? 'Stamp and Signature' : 'Carimbo e Assinatura',
       stampRight: isEn ? 'STAMP AND SIGNATURE' : 'CARIMBO E ASSINATURA'
     }
@@ -678,11 +678,11 @@ const buildCommercialInvoiceData = (payload) => {
       phone: payload.exporterPhone || ''
     },
     payer: {
-      company: payload.payerCompany || 'C. N PAGAMENTOS ONLINE LTDA',
-      tradeName: payload.payerTradeName || 'ZENITH PAY',
-      address: payload.payerAddress || '',
-      zipCode: payload.payerZipCode || '',
-      taxId: payload.payerTaxId || ''
+      company: payload.payerCompany || 'Prismapay Instituicao de Pagamento Ltda',
+      tradeName: payload.payerTradeName || 'Prismapay',
+      address: payload.payerAddress || 'Rua Visconde de Inhauma, 134, Sal 2001 a 2024 - Rio de Janeiro - Brazil.',
+      zipCode: payload.payerZipCode || '20.091-901',
+      taxId: payload.payerTaxId || '61.338.266/0001-33'
     },
     bank: {
       beneficiary: payload.bankBeneficiary || payload.exporterCompany || '',
@@ -783,7 +783,7 @@ const buildInvoicePayload = payload => {
       intermediarySwift: sanitizeText(payload.intermediarySwift)
     },
     acknowledgement: sanitizeText(payload.acknowledgementText, 'Received above goods in good order & condition. Goods sold are not returnable.'),
-    signatureName: sanitizeText(payload.signatureName, 'Zenith Pay'),
+    signatureName: sanitizeText(payload.signatureName, INVOICE_DEFAULTS.companyName),
     notes: ensureArray(payload.extraNotes).map(line => sanitizeText(line)).filter(Boolean),
     items,
     totals: {
@@ -827,7 +827,7 @@ const renderInvoicePdf = (res, invoice) => {
   const t = getInvoiceText(invoice.lang);
 
   // Header
-  doc.font('Helvetica-Bold').fontSize(22).text(invoice.company.name || 'ZENITH PAY', startX, doc.y, { align: 'center', width: pageWidth });
+  doc.font('Helvetica-Bold').fontSize(22).text(invoice.company.name || INVOICE_DEFAULTS.companyName, startX, doc.y, { align: 'center', width: pageWidth });
   doc.moveDown(0.2);
   doc.font('Helvetica').fontSize(8).fillColor('#333');
   [

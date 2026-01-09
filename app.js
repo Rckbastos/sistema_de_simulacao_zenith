@@ -46,6 +46,14 @@
     style: 'currency',
     currency: 'USD'
   });
+  const currencyFormatterEUR = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'EUR'
+  });
+  const currencyFormatterAED = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'AED'
+  });
   const MAX_COTACAO_ITENS = 3;
   const MAX_INVOICE_ITENS = 3;
 
@@ -87,14 +95,27 @@
     const node = el(id);
     if (node) node.textContent = value;
   };
+  const normalizeMoedaCode = (moeda = 'BRL') => {
+    const normalized = (moeda || 'BRL').toString().trim().toUpperCase();
+    return normalized || 'BRL';
+  };
   const formatCurrency = value => currencyFormatter.format(Number(value) || 0);
   const formatCurrencyByMoeda = (value, moeda = 'BRL') => {
     const numero = Number(value) || 0;
-    const m = (moeda || 'BRL').toString().trim().toUpperCase();
-    if (m === 'USD' || m === 'USDT') {
-      return `${m} ${currencyFormatterUSD.format(numero).replace('$', '').trim()}`;
+    const m = normalizeMoedaCode(moeda);
+    if (m === 'BRL') {
+      return currencyFormatter.format(numero);
     }
-    return currencyFormatter.format(numero);
+    const formatter = m === 'USD' || m === 'USDT'
+      ? currencyFormatterUSD
+      : m === 'EUR'
+        ? currencyFormatterEUR
+        : m === 'AED'
+          ? currencyFormatterAED
+          : currencyFormatter;
+    const numeric = formatter.format(numero).replace(/[^0-9.,-]/g, '').trim();
+    const prefix = m === 'USDT' ? 'USDT' : m;
+    return `${prefix} ${numeric || '0.00'}`;
   };
   const formatFxRate = (value) => {
     const num = Number(value);
@@ -102,8 +123,7 @@
     return num.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
   };
   const normalizarMoedaLocal = (moeda = 'BRL') => {
-    const normalized = (moeda || 'BRL').toString().trim().toUpperCase();
-    return normalized || 'BRL';
+    return normalizeMoedaCode(moeda);
   };
   const adicionarValorPorMoeda = (mapa, moeda, valor) => {
     const numero = Number(valor);
