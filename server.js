@@ -72,17 +72,17 @@ const DEFAULT_PERMISSIONS = {
 };
 
 const INVOICE_DEFAULTS = {
-  companyName: 'Prismapay Instituicao de Pagamento Ltda',
-  addressLine1: 'Rua Visconde de Inhauma, 134, Sal 2001 a 2024 - Rio de Janeiro - Brazil.',
-  addressLine2: 'ZIP Code: 20.091-901',
+  companyName: 'C. N Pagamentos Online LTDA',
+  addressLine1: 'Rua Washington Luis 59 Lote 10B Quadra43 Cxpst 20 Centro Nossa Senhora das Graças PR',
+  addressLine2: 'ZIP Code: 86680-000',
   phone: 'Tel: [Telefone]',
   fax: 'Fax: [Fax]',
   email: 'Email: [Email]',
   website: 'Web: www.zenithpay.com',
-  taxId: 'CNPJ/Tax ID: 61.338.266/0001-33',
+  taxId: 'CNPJ/Tax ID: 53.213.723/0001-35',
   romalpaClause:
     process.env.INVOICE_ROMALPA_CLAUSE
-    || 'Goods sold and delivered remain the property of Prismapay Instituicao de Pagamento Ltda until full payment is received.',
+    || 'Goods sold and delivered remain the property of C. N Pagamentos Online LTDA until full payment is received.',
   terms: (process.env.INVOICE_TERMS || 'Goods sold are not returnable unless defective.|Payment must be received before shipment for prepayment terms.|Any disputes shall be governed by the laws of [Jurisdiction].|Buyer is responsible for all import duties, taxes, and customs clearance fees.').split('|')
 };
 
@@ -678,14 +678,14 @@ const buildCommercialInvoiceData = (payload) => {
       phone: payload.exporterPhone || ''
     },
     payer: {
-      company: payload.payerCompany || 'Prismapay Instituicao de Pagamento Ltda',
-      tradeName: payload.payerTradeName || 'Prismapay',
-      address: payload.payerAddress || 'Rua Visconde de Inhauma, 134, Sal 2001 a 2024 - Rio de Janeiro - Brazil.',
-      zipCode: payload.payerZipCode || '20.091-901',
-      taxId: payload.payerTaxId || '61.338.266/0001-33'
+      company: payload.payerCompany || 'C. N Pagamentos Online LTDA',
+      tradeName: payload.payerTradeName || 'C. N Pagamentos Online',
+      address: payload.payerAddress || 'Rua Washington Luis 59 Lote 10B Quadra43 Cxpst 20 Centro Nossa Senhora das Graças PR',
+      zipCode: payload.payerZipCode || '86680-000',
+      taxId: payload.payerTaxId || '53.213.723/0001-35'
     },
     bank: {
-      beneficiary: payload.bankBeneficiary || payload.exporterCompany || '',
+      beneficiary: payload.bankBeneficiary || '',
       accountNumber: payload.bankAccountNumber || '',
       bankName: payload.bankName || '',
       bankAddress: payload.bankAddress || '',
@@ -777,7 +777,7 @@ const buildInvoicePayload = payload => {
       bankBranch: sanitizeText(payload.bankBranch),
       beneficiaryAccount: sanitizeText(payload.beneficiaryAccount),
       iban: sanitizeText(payload.iban),
-      beneficiaryName: sanitizeText(payload.beneficiaryName, INVOICE_DEFAULTS.companyName),
+      beneficiaryName: sanitizeText(payload.beneficiaryName, ''),
       beneficiaryAddress: sanitizeText(payload.beneficiaryAddress),
       intermediaryBank: sanitizeText(payload.intermediaryBank),
       intermediarySwift: sanitizeText(payload.intermediarySwift)

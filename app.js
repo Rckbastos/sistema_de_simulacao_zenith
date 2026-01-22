@@ -288,7 +288,7 @@
       bankSwift: '',
       bankBranch: '',
       bankAccount: '',
-      bankBeneficiary: 'Prismapay Instituicao de Pagamento Ltda',
+      bankBeneficiary: '',
       bankBeneficiaryAddress: '',
       intermediaryBank: '',
       intermediarySwift: ''
@@ -1232,7 +1232,7 @@
     const clienteNome = form.clienteNome || 'CLIENTE';
     const clienteEndereco = form.clienteEndereco || '';
     const clienteTelefone = form.clienteTelefone || '';
-    const bankBeneficiary = form.bankBeneficiary || clienteNome;
+    const bankBeneficiary = form.bankBeneficiary || '';
     const invoiceNumber = (form.invoiceNumber && form.invoiceNumber.trim())
       || `INV-${(form.invoiceDate || getDefaultInvoiceForm().invoiceDate).replace(/-/g, '')}`;
     const issueDate = formatInvoiceIssueDate(form.invoiceDate);
@@ -1270,7 +1270,7 @@
       intermediaryBank: form.intermediaryBank,
       intermediarySwift: form.intermediarySwift,
       acknowledgementText: form.observacoes,
-      signatureName: state.user?.nome || 'Prismapay Instituicao de Pagamento Ltda',
+      signatureName: state.user?.nome || 'C. N Pagamentos Online LTDA',
       extraNotes: form.observacoes ? [form.observacoes] : [],
       amountInWords,
       moeda: form.moeda,
@@ -1278,11 +1278,11 @@
       exporterCompany: clienteNome,
       exporterAddress: clienteEndereco,
       exporterPhone: clienteTelefone ? `Tel: ${clienteTelefone}` : '',
-      payerCompany: 'Prismapay Instituicao de Pagamento Ltda',
-      payerTradeName: 'Prismapay',
-      payerAddress: 'Rua Visconde de Inhauma, 134, Sal 2001 a 2024 - Rio de Janeiro - Brazil.',
-      payerZipCode: '20.091-901',
-      payerTaxId: '61.338.266/0001-33',
+      payerCompany: 'C. N Pagamentos Online LTDA',
+      payerTradeName: 'C. N Pagamentos Online',
+      payerAddress: 'Rua Washington Luis 59 Lote 10B Quadra43 Cxpst 20 Centro Nossa Senhora das Graças PR',
+      payerZipCode: '86680-000',
+      payerTaxId: '53.213.723/0001-35',
       bankAccountNumber: form.bankAccount,
       bankAddress: form.bankBeneficiaryAddress,
       bankBeneficiary,
